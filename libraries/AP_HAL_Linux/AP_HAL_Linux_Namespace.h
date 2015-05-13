@@ -25,6 +25,7 @@ namespace Linux {
     class LinuxRCInput_PRU;
     class LinuxRCInput_AioPRU;
     class LinuxRCInput_Navio;
+    class LinuxRCInput_UART;
     class LinuxRCInput_ZYNQ;
     class LinuxRCOutput_PRU;
     class LinuxRCOutput_AioPRU;
