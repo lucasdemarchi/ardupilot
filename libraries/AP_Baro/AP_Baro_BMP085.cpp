@@ -129,11 +129,8 @@ void AP_Baro_BMP085::update(void)
     }
 
     float temperature = 0.1f * _temp;
-    float pressure = _press_sum / _count;
 
-    _count = 0;
-    _press_sum = 0;
-
+    float pressure = _pressure_filter.getf();
     _copy_to_frontend(_instance, pressure, temperature);
 }
 
@@ -219,12 +216,11 @@ void AP_Baro_BMP085::_calculate()
     x1 = (p >> 8) * (p >> 8);
     x1 = (x1 * 3038) >> 16;
     x2 = (-7357 * p) >> 16;
-    _press_sum += p + ((x1 + x2 + 3791) >> 4);
+    p += ((x1 + x2 + 3791) >> 4);
 
-    _count++;
-    if (_count == 254) {
-        _press_sum *= 0.5f;
-        _count /= 2;
+    _pressure_filter.apply(p);
+    if (_count == 0) {
+        _count++;
     }
 }
 

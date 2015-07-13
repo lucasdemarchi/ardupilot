@@ -4,6 +4,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/I2CDevice.h>
 #include <AP_HAL/utility/OwnPtr.h>
+#include <Filter/Filter.h>
 
 #include "AP_Baro_Backend.h"
 
@@ -45,5 +46,5 @@ private:
     int32_t _raw_pressure;
     int32_t _raw_temp;
     int32_t _temp;
-    float _press_sum;
+    AverageIntegralFilter<int32_t, int32_t, 10> _pressure_filter;
 };
