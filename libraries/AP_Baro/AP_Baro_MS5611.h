@@ -75,7 +75,16 @@ private:
 class AP_Baro_MS56XX : public AP_Baro_Backend
 {
 public:
-    AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial, bool use_timer);
+    enum ProducerType {
+        /* sensor data is produced by calling accumulate() or update() */
+        BARO,
+        /* sensor data is produced by scheduler timer routine */
+        TIMER
+    };
+
+    AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial,
+                   enum ProducerType producer_type);
+
     void update();
     void accumulate();
 
@@ -95,7 +104,7 @@ private:
     uint8_t                  _state;
     uint32_t                 _last_timer;
 
-    bool _use_timer;
+    enum ProducerType _producer_type;
 
 protected:
     // Internal calibration registers
@@ -107,7 +116,8 @@ protected:
 class AP_Baro_MS5611 : public AP_Baro_MS56XX
 {
 public:
-    AP_Baro_MS5611(AP_Baro &baro, AP_SerialBus *serial, bool use_timer);
+    AP_Baro_MS5611(AP_Baro &baro, AP_SerialBus *serial,
+                   enum ProducerType producer_type);
 private:
     void _calculate();
 };
@@ -115,7 +125,8 @@ private:
 class AP_Baro_MS5607 : public AP_Baro_MS56XX
 {
 public:
-    AP_Baro_MS5607(AP_Baro &baro, AP_SerialBus *serial, bool use_timer);
+    AP_Baro_MS5607(AP_Baro &baro, AP_SerialBus *serial,
+                   enum ProducerType producer_type);
 private:
     void _calculate();
 };
@@ -123,7 +134,8 @@ private:
 class AP_Baro_MS5637 : public AP_Baro_MS56XX
 {
 public:
-    AP_Baro_MS5637(AP_Baro &baro, AP_SerialBus *serial, bool use_timer);
+    AP_Baro_MS5637(AP_Baro &baro, AP_SerialBus *serial,
+                   enum ProducerType producer_type);
 private:
     void _calculate();
 };
