@@ -156,22 +156,26 @@ void AP_SerialBus_I2C::sem_give()
 /*
   constructor
  */
-AP_Baro_MS56XX::AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial, bool use_timer) :
+AP_Baro_MS56XX::AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial,
+                               enum ProducerType producer_type) :
     AP_Baro_Backend(baro),
     _serial(serial),
     _updated(false),
     _state(0),
     _last_timer(0),
-    _use_timer(use_timer),
+    _producer_type(producer_type),
     _D1(0.0f),
     _D2(0.0f)
 {
     _instance = _frontend.register_sensor();
     _serial->init();
 
-    // we need to suspend timers to prevent other SPI drivers grabbing
-    // the bus while we do the long initialisation
-    hal.scheduler->suspend_timer_procs();
+
+    if (_producer_type == AP_Baro_MS56XX::ProducerType::TIMER) {
+        // we need to suspend timers to prevent other SPI drivers grabbing
+        // the bus while we do the long initialisation
+        hal.scheduler->suspend_timer_procs();
+    }
 
     if (!_serial->sem_take_blocking()){
         hal.scheduler->panic(PSTR("PANIC: AP_Baro_MS56XX: failed to take serial semaphore for init"));
@@ -205,10 +209,9 @@ AP_Baro_MS56XX::AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial, bool use_tim
 
     _serial->sem_give();
 
-    hal.scheduler->resume_timer_procs();
-
-    if (_use_timer) {
+    if (_producer_type == AP_Baro_MS56XX::ProducerType::TIMER) {
         hal.scheduler->register_timer_process(FUNCTOR_BIND_MEMBER(&AP_Baro_MS56XX::_timer, void));
+        hal.scheduler->resume_timer_procs();
     }
 }
 
@@ -337,7 +340,7 @@ void AP_Baro_MS56XX::_timer(void)
 
 void AP_Baro_MS56XX::update()
 {
-    if (!_use_timer) {
+    if (_producer_type == AP_Baro_MS5611::ProducerType::BARO) {
         // if we're not using the timer then accumulate one more time
         // to cope with the calibration loop and minimise lag
         accumulate();
@@ -369,8 +372,9 @@ void AP_Baro_MS56XX::update()
 }
 
 /* MS5611 class */
-AP_Baro_MS5611::AP_Baro_MS5611(AP_Baro &baro, AP_SerialBus *serial, bool use_timer)
-    :AP_Baro_MS56XX(baro, serial, use_timer)
+AP_Baro_MS5611::AP_Baro_MS5611(AP_Baro &baro, AP_SerialBus *serial,
+                               enum ProducerType producer_type)
+    :AP_Baro_MS56XX(baro, serial, producer_type)
 {}
 
 // Calculate Temperature and compensated Pressure in real units (Celsius degrees*100, mbar*100).
@@ -410,8 +414,9 @@ void AP_Baro_MS5611::_calculate()
 }
 
 /* MS5607 Class */
-AP_Baro_MS5607::AP_Baro_MS5607(AP_Baro &baro, AP_SerialBus *serial, bool use_timer)
-    :AP_Baro_MS56XX(baro, serial, use_timer)
+AP_Baro_MS5607::AP_Baro_MS5607(AP_Baro &baro, AP_SerialBus *serial,
+                               enum ProducerType producer_type)
+    :AP_Baro_MS56XX(baro, serial, producer_type)
 {}
 // Calculate Temperature and compensated Pressure in real units (Celsius degrees*100, mbar*100).
 void AP_Baro_MS5607::_calculate()
@@ -450,8 +455,9 @@ void AP_Baro_MS5607::_calculate()
 }
 
 /* MS563 Class */
-AP_Baro_MS5637::AP_Baro_MS5637(AP_Baro &baro, AP_SerialBus *serial, bool use_timer)
-    : AP_Baro_MS56XX(baro, serial, use_timer)
+AP_Baro_MS5637::AP_Baro_MS5637(AP_Baro &baro, AP_SerialBus *serial,
+                               enum ProducerType producer_type)
+    : AP_Baro_MS56XX(baro, serial, producer_type)
 {
 }
 
@@ -495,7 +501,7 @@ void AP_Baro_MS5637::_calculate()
 */
 void AP_Baro_MS56XX::accumulate(void)
 {
-    if (!_use_timer) {
+    if (_producer_type == AP_Baro_MS5611::ProducerType::BARO) {
         // the timer isn't being called as a timer, so we need to call
         // it in accumulate()
         _timer();

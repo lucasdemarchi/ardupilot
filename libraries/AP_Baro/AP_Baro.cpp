@@ -292,12 +292,16 @@ void AP_Baro::init(void)
     }
 #elif HAL_BARO_DEFAULT == HAL_BARO_MS5611 && HAL_BARO_MS5611_I2C_BUS == 0
     {
-        drivers[0] = new AP_Baro_MS5611(*this, new AP_SerialBus_I2C(hal.i2c, HAL_BARO_MS5611_I2C_ADDR), false);
+        drivers[0] = new AP_Baro_MS5611(*this,
+                                        new AP_SerialBus_I2C(hal.i2c, HAL_BARO_MS5611_I2C_ADDR),
+                                        AP_Baro_MS5611::ProducerType::BARO);
         _num_drivers = 1;
     }
 #elif HAL_BARO_DEFAULT == HAL_BARO_MS5611 && HAL_BARO_MS5611_I2C_BUS == 1
     {
-        drivers[0] = new AP_Baro_MS5611(*this, new AP_SerialBus_I2C(hal.i2c1, HAL_BARO_MS5611_I2C_ADDR), false);
+        drivers[0] = new AP_Baro_MS5611(*this,
+                                        new AP_SerialBus_I2C(hal.i2c1, HAL_BARO_MS5611_I2C_ADDR),
+                                        AP_Baro_MS5611::ProducerType::BARO);
         _num_drivers = 1;
     }
 #elif HAL_BARO_DEFAULT == HAL_BARO_MS5611_SPI
@@ -305,12 +309,14 @@ void AP_Baro::init(void)
         drivers[0] = new AP_Baro_MS5611(*this, 
                                         new AP_SerialBus_SPI(AP_HAL::SPIDevice_MS5611, 
                                                              AP_HAL::SPIDeviceDriver::SPI_SPEED_HIGH),
-                                        true);
+                                        AP_Baro_MS5611::ProducerType::TIMER);
         _num_drivers = 1;
     }
 #elif HAL_BARO_DEFAULT == HAL_BARO_MS5607 && HAL_BARO_MS5607_I2C_BUS == 1
     {
-        drivers[0] = new AP_Baro_MS5607(*this, new AP_SerialBus_I2C(hal.i2c1, HAL_BARO_MS5607_I2C_ADDR), true);
+        drivers[0] = new AP_Baro_MS5607(*this,
+                                        new AP_SerialBus_I2C(hal.i2c1, HAL_BARO_MS5607_I2C_ADDR),
+                                        AP_Baro_MS5611::ProducerType::TIMER);
         _num_drivers = 1;
     }
 #elif HAL_BARO_DEFAULT == HAL_BARO_MS5637_I2C
