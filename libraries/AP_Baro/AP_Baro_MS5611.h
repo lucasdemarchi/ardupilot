@@ -95,6 +95,8 @@ private:
     bool _check_crc();
 
     void _timer();
+    /* the engine for accumulating */
+    void _accumulate();
 
     /* Asynchronous state: */
     volatile bool            _updated;
