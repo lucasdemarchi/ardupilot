@@ -262,19 +262,13 @@ bool AP_Baro_MS56XX::_check_crc(void)
     return (0x000F & crc_read) == (n_rem ^ 0x00);
 }
 
-
 /*
   Read the sensor. This is a state machine
   We read one time Temperature (state=1) and then 4 times Pressure (states 2-5)
   temperature does not change so quickly...
 */
-void AP_Baro_MS56XX::_timer(void)
+void AP_Baro_MS56XX::_accumulate(void)
 {
-    // Throttle read rate to 100hz maximum.
-    if (hal.scheduler->micros() - _last_timer < 10000) {
-        return;
-    }
-
     if (!_serial->sem_take_nonblocking()) {
         return;
     }
@@ -336,6 +330,16 @@ void AP_Baro_MS56XX::_timer(void)
 
     _last_timer = hal.scheduler->micros();
     _serial->sem_give();
+}
+
+void AP_Baro_MS56XX::_timer(void)
+{
+    // Throttle read rate to 100hz maximum.
+    if (hal.scheduler->micros() - _last_timer < 10000) {
+        return;
+    }
+
+    _accumulate();
 }
 
 void AP_Baro_MS56XX::update()
