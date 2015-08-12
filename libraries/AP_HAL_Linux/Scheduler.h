@@ -87,7 +87,8 @@ private:
     void _run_timers(bool called_from_timer_thread);
     void _run_io(void);
     void _create_realtime_thread(pthread_t *ctx, int rtprio, const char *name,
-                                 pthread_startroutine_t start_routine);
+                                 pthread_startroutine_t start_routine,
+                                 void *arg);
 
     uint64_t _stopped_clock_usec;
 

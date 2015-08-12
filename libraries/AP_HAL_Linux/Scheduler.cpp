@@ -47,7 +47,8 @@ Scheduler::Scheduler()
 
 void Scheduler::_create_realtime_thread(pthread_t *ctx, int rtprio,
                                              const char *name,
-                                             pthread_startroutine_t start_routine)
+                                             pthread_startroutine_t start_routine,
+                                             void *arg)
 {
     struct sched_param param = { .sched_priority = rtprio };
     pthread_attr_t attr;
@@ -64,7 +65,7 @@ void Scheduler::_create_realtime_thread(pthread_t *ctx, int rtprio,
         pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
         pthread_attr_setschedparam(&attr, &param);
     }
-    r = pthread_create(ctx, &attr, start_routine, this);
+    r = pthread_create(ctx, &attr, start_routine, arg);
     if (r != 0) {
         hal.console->printf("Error creating thread '%s': %s\n",
                             name, strerror(r));
@@ -124,7 +125,7 @@ void Scheduler::init(void* machtnichts)
 
     for (iter = table; iter->ctx; iter++)
         _create_realtime_thread(iter->ctx, iter->rtprio, iter->name,
-                                iter->start_routine);
+                                iter->start_routine, this);
 }
 
 void Scheduler::_microsleep(uint32_t usec)
