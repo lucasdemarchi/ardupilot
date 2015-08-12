@@ -42,6 +42,12 @@ public:
     // register a low priority IO task
     virtual void     register_io_process(AP_HAL::MemberProc) = 0;
 
+    // register a process in the same fashion of SCHED_FIFO thread scheduling
+    // policy
+    virtual void     register_fifo_process(AP_HAL::MemberProc) {
+        panic(PSTR("registering fifo processes is not supported for the current port\n"));
+    }
+
     // suspend and resume both timer and IO processes
     virtual void     suspend_timer_procs() = 0;
     virtual void     resume_timer_procs() = 0;
