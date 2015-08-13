@@ -200,8 +200,17 @@ AP_Baro_MS56XX::AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial,
 
     _serial->sem_give();
 
-    if (_producer_type == AP_Baro_MS56XX::ProducerType::TIMER) {
-        hal.scheduler->register_timer_process(FUNCTOR_BIND_MEMBER(&AP_Baro_MS56XX::_timer, void));
+    switch (_producer_type) {
+    case AP_Baro_MS56XX::ProducerType::TIMER:
+        hal.scheduler->register_timer_process(
+                FUNCTOR_BIND_MEMBER(&AP_Baro_MS56XX::_timer, void));
+        break;
+    case AP_Baro_MS56XX::ProducerType::FIFO_PROCESS:
+        hal.scheduler->register_fifo_process(
+                FUNCTOR_BIND_MEMBER(&AP_Baro_MS56XX::_fifo_process, void));
+        break;
+    default:
+        ; // avoid warning
     }
 }
 
@@ -314,6 +323,18 @@ void AP_Baro_MS56XX::_timer(void)
     // Throttle read rate to 100hz maximum.
     if (hal.scheduler->micros() - _last_timer < 10000) {
         return;
+    }
+
+    _accumulate();
+}
+
+void AP_Baro_MS56XX::_fifo_process()
+{
+    // Throttle read rate to 100hz maximum.
+    uint32_t dt = hal.scheduler->micros() - _last_timer;
+    while (dt < 10000) {
+        hal.scheduler->delay_microseconds((uint16_t)(10000 - dt));
+        dt = hal.scheduler->micros() - _last_timer;
     }
 
     _accumulate();

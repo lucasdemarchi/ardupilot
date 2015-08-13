@@ -79,7 +79,10 @@ public:
         /* sensor data is produced by calling accumulate() or update() */
         BARO,
         /* sensor data is produced by scheduler timer routine */
-        TIMER
+        TIMER,
+        /* sensor data is produced by a fifo process (please note that we're
+         * talking about *fifo process*, not storing data into a FIFO) */
+        FIFO_PROCESS
     };
 
     AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial,
@@ -95,6 +98,8 @@ private:
     bool _check_crc();
 
     void _timer();
+    void _fifo_process();
+
     /* the engine for accumulating */
     void _accumulate();
 
