@@ -227,9 +227,19 @@ AP_Baro_MS56XX::AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial,
 
     _serial->sem_give();
 
-    if (_producer_type == AP_Baro_MS56XX::ProducerType::TIMER) {
-        hal.scheduler->register_timer_process(FUNCTOR_BIND_MEMBER(&AP_Baro_MS56XX::_timer, void));
+    switch (_producer_type) {
+    case AP_Baro_MS56XX::ProducerType::TIMER:
+        hal.scheduler->register_timer_process(
+                FUNCTOR_BIND_MEMBER(&AP_Baro_MS56XX::_timer, void));
         hal.scheduler->resume_timer_procs();
+        break;
+    case AP_Baro_MS56XX::ProducerType::FIFO_PROCESS:
+        hal.scheduler->register_fifo_process(
+                FUNCTOR_BIND_MEMBER(&AP_Baro_MS56XX::_fifo_process, void));
+        _fifo_process_sem = hal.scheduler->new_semaphore();
+        break;
+    default:
+        ; // avoid warning
     }
 }
 
@@ -360,6 +370,22 @@ void AP_Baro_MS56XX::_timer(void)
     _accumulate();
 }
 
+void AP_Baro_MS56XX::_fifo_process()
+{
+    // Throttle read rate to 100hz maximum.
+    uint32_t dt = AP_HAL::micros() - _last_timer;
+    while (dt < 10000) {
+        hal.scheduler->delay_microseconds((uint16_t)(10000 - dt));
+        dt = AP_HAL::micros() - _last_timer;
+    }
+
+    if (!_fifo_process_sem->take(0)) {
+        return;
+    }
+    _accumulate();
+    _fifo_process_sem->give();
+}
+
 void AP_Baro_MS56XX::update()
 {
     if (_producer_type == AP_Baro_MS5611::ProducerType::BARO) {
@@ -376,13 +402,24 @@ void AP_Baro_MS56XX::update()
 
     // Suspend timer procs because these variables are written to
     // in "_update".
-    hal.scheduler->suspend_timer_procs();
+    if (_producer_type == ProducerType::FIFO_PROCESS) {
+        if (!_fifo_process_sem->take(0)) {
+            return;
+        }
+    } else {
+        hal.scheduler->suspend_timer_procs();
+    }
     sD1 = _s_D1; _s_D1 = 0;
     sD2 = _s_D2; _s_D2 = 0;
     d1count = _d1_count; _d1_count = 0;
     d2count = _d2_count; _d2_count = 0;
     _updated = false;
-    hal.scheduler->resume_timer_procs();
+
+    if (_producer_type == ProducerType::FIFO_PROCESS) {
+        _fifo_process_sem->give();
+    } else {
+        hal.scheduler->resume_timer_procs();
+    }
 
     if (d1count != 0) {
         _D1 = ((float)sD1) / d1count;
