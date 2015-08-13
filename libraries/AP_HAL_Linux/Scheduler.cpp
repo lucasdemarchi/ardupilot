@@ -238,6 +238,25 @@ void LinuxScheduler::register_io_process(AP_HAL::MemberProc proc)
     }
 }
 
+void LinuxScheduler::register_fifo_process(AP_HAL::MemberProc proc)
+{
+    char name[16];
+    pthread_t ctx;
+
+    if (_num_fifo_procs == LINUX_SCHEDULER_MAX_FIFO_PROCS) {
+        panic("Out of FIFO processes\n");
+    }
+
+    _fifo_proc[_num_fifo_procs].sched = this;
+    _fifo_proc[_num_fifo_procs].proc = proc;
+    sprintf(name, "fifo_thread_%u", _num_fifo_procs);
+
+    _create_realtime_thread(&ctx, APM_LINUX_TIMER_PRIORITY, name,
+                            &Linux::LinuxScheduler::_fifo_thread,
+                            _fifo_proc + _num_fifo_procs);
+    _num_fifo_procs++;
+}
+
 void LinuxScheduler::register_timer_failsafe(AP_HAL::Proc failsafe, uint32_t period_us)
 {
     _failsafe = failsafe;
@@ -404,6 +423,19 @@ void *LinuxScheduler::_io_thread(void* arg)
 
         // run registered IO procepsses
         sched->_run_io();
+    }
+    return NULL;
+}
+
+void *LinuxScheduler::_fifo_thread(void* arg)
+{
+    struct FifoProcArg *args = (struct FifoProcArg *)arg;
+
+    while (args->sched->system_initializing()) {
+        poll(NULL, 0, 1);
+    }
+    while (true) {
+        args->proc();
     }
     return NULL;
 }
