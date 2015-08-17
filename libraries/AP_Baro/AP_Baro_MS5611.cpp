@@ -208,6 +208,7 @@ AP_Baro_MS56XX::AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial,
     case AP_Baro_MS56XX::ProducerType::FIFO_PROCESS:
         hal.scheduler->register_fifo_process(
                 FUNCTOR_BIND_MEMBER(&AP_Baro_MS56XX::_fifo_process, void));
+        _fifo_process_sem = hal.scheduler->new_semaphore();
         break;
     default:
         ; // avoid warning
@@ -337,7 +338,11 @@ void AP_Baro_MS56XX::_fifo_process()
         dt = hal.scheduler->micros() - _last_timer;
     }
 
+    if (!_fifo_process_sem->take(0)) {
+        return;
+    }
     _accumulate();
+    _fifo_process_sem->give();
 }
 
 void AP_Baro_MS56XX::update()
@@ -356,13 +361,23 @@ void AP_Baro_MS56XX::update()
 
     // Suspend timer procs because these variables are written to
     // in "_update".
-    hal.scheduler->suspend_timer_procs();
+    if (_producer_type == ProducerType::FIFO_PROCESS) {
+        if (!_fifo_process_sem->take(0)) {
+            return;
+        }
+    } else {
+        hal.scheduler->suspend_timer_procs();
+    }
     sD1 = _s_D1; _s_D1 = 0;
     sD2 = _s_D2; _s_D2 = 0;
     d1count = _d1_count; _d1_count = 0;
     d2count = _d2_count; _d2_count = 0;
     _updated = false;
-    hal.scheduler->resume_timer_procs();
+    if (_producer_type == ProducerType::FIFO_PROCESS) {
+        _fifo_process_sem->give();
+    } else {
+        hal.scheduler->resume_timer_procs();
+    }
     
     if (d1count != 0) {
         _D1 = ((float)sD1) / d1count;
