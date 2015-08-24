@@ -51,7 +51,6 @@ private:
     int  mem_fd;
     void *gpio_map;
     volatile uint32_t *gpio;
-    int getRaspberryPiVersion() const;
 
 public:
     LinuxGPIO_RPI();
