@@ -47,15 +47,16 @@
 using namespace Linux;
 
 #define PWM_CHAN_COUNT 13
-#define CHANNEL_OFFSET 3
 
 static const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 
-LinuxRCOutput_Navio::LinuxRCOutput_Navio(uint8_t oe_pin_number) :
+LinuxRCOutput_Navio::LinuxRCOutput_Navio(uint8_t channel_offset,
+                                         uint8_t oe_pin_number) :
     _i2c_sem(NULL),
     _enable_pin(NULL),
     _frequency(50),
     _pulses_buffer(new uint16_t[PWM_CHAN_COUNT]),
+    _channel_offset(channel_offset),
     _oe_pin_number(oe_pin_number)
 {
 }
@@ -199,7 +200,7 @@ void LinuxRCOutput_Navio::flush()
     }
 
     hal.i2c->writeRegisters(PCA9685_ADDRESS,
-                            PCA9685_RA_LED0_ON_L + 4 * (CHANNEL_OFFSET + min_ch),
+                            PCA9685_RA_LED0_ON_L + 4 * (_channel_offset + min_ch),
                             (max_ch - min_ch) * 4,
                             &data[min_ch * 4]);
 
