@@ -4,11 +4,11 @@
 
 #include "AP_HAL_Linux.h"
 
-class Linux::LinuxRCOutput_Navio : public AP_HAL::RCOutput {
+class Linux::RCOutput_PCA9685 : public AP_HAL::RCOutput {
     public:
-    LinuxRCOutput_Navio(bool external_clock, uint8_t channel_offset,
-                        uint8_t oe_pin_number);
-    ~LinuxRCOutput_Navio();
+    RCOutput_PCA9685(bool external_clock, uint8_t channel_offset,
+                     uint8_t oe_pin_number);
+    ~RCOutput_PCA9685();
     void     init(void* machtnichts);
     void     reset_all_channels();
     void     set_freq(uint32_t chmask, uint16_t freq_hz);

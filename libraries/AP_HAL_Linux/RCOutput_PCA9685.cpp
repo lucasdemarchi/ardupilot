@@ -4,7 +4,7 @@
 
 #if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO
 
-#include "RCOutput_Navio.h"
+#include "RCOutput_PCA9685.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -58,9 +58,9 @@ using namespace Linux;
 
 static const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 
-LinuxRCOutput_Navio::LinuxRCOutput_Navio(bool external_clock,
-                                         uint8_t channel_offset,
-                                         uint8_t oe_pin_number) :
+RCOutput_PCA9685::RCOutput_PCA9685(bool external_clock,
+                                   uint8_t channel_offset,
+                                   uint8_t oe_pin_number) :
     _i2c_sem(NULL),
     _enable_pin(NULL),
     _frequency(50),
@@ -75,16 +75,16 @@ LinuxRCOutput_Navio::LinuxRCOutput_Navio(bool external_clock,
         _osc_clock = PCA9685_INTERNAL_CLOCK;
 }
 
-LinuxRCOutput_Navio::~LinuxRCOutput_Navio()
+RCOutput_PCA9685::~RCOutput_PCA9685()
 {
     delete [] _pulses_buffer;
 }
 
-void LinuxRCOutput_Navio::init(void* machtnicht)
+void RCOutput_PCA9685::init(void* machtnicht)
 {
     _i2c_sem = hal.i2c->get_semaphore();
     if (_i2c_sem == NULL) {
-        hal.scheduler->panic(PSTR("PANIC: RCOutput_Navio did not get "
+        hal.scheduler->panic(PSTR("PANIC: RCOutput_PCA9685 did not get "
                                   "valid I2C semaphore!"));
         return; /* never reached */
     }
@@ -100,7 +100,7 @@ void LinuxRCOutput_Navio::init(void* machtnicht)
     _enable_pin->write(0);
 }
 
-void LinuxRCOutput_Navio::reset_all_channels()
+void RCOutput_PCA9685::reset_all_channels()
 {
     if (!_i2c_sem->take(10)) {
         return;
@@ -115,7 +115,7 @@ void LinuxRCOutput_Navio::reset_all_channels()
     _i2c_sem->give();
 }
 
-void LinuxRCOutput_Navio::set_freq(uint32_t chmask, uint16_t freq_hz)
+void RCOutput_PCA9685::set_freq(uint32_t chmask, uint16_t freq_hz)
 {
     /* Correctly finish last pulses */
     for (int i = 0; i < PWM_CHAN_COUNT; i++) {
@@ -157,23 +157,23 @@ void LinuxRCOutput_Navio::set_freq(uint32_t chmask, uint16_t freq_hz)
     _i2c_sem->give();
 }
 
-uint16_t LinuxRCOutput_Navio::get_freq(uint8_t ch)
+uint16_t RCOutput_PCA9685::get_freq(uint8_t ch)
 {
     return _frequency;
 }
 
-void LinuxRCOutput_Navio::enable_ch(uint8_t ch)
+void RCOutput_PCA9685::enable_ch(uint8_t ch)
 {
 
 }
 
-void LinuxRCOutput_Navio::disable_ch(uint8_t ch)
+void RCOutput_PCA9685::disable_ch(uint8_t ch)
 {
     write(ch, 0);
 }
 
 /* calls to write() and flush() must occur on the same thread */
-void LinuxRCOutput_Navio::write(uint8_t ch, uint16_t period_us, int flags)
+void RCOutput_PCA9685::write(uint8_t ch, uint16_t period_us, int flags)
 {
     if (ch >= PWM_CHAN_COUNT) {
         return;
@@ -189,7 +189,7 @@ void LinuxRCOutput_Navio::write(uint8_t ch, uint16_t period_us, int flags)
 }
 
 /* calls to write() and flush() must occur on the same thread */
-void LinuxRCOutput_Navio::flush()
+void RCOutput_PCA9685::flush()
 {
     uint8_t data[PWM_CHAN_COUNT * 4] = { };
     uint8_t max_ch, min_ch;
@@ -227,12 +227,12 @@ void LinuxRCOutput_Navio::flush()
     _i2c_sem->give();
 }
 
-uint16_t LinuxRCOutput_Navio::read(uint8_t ch)
+uint16_t RCOutput_PCA9685::read(uint8_t ch)
 {
     return _pulses_buffer[ch];
 }
 
-void LinuxRCOutput_Navio::read(uint16_t* period_us, uint8_t len)
+void RCOutput_PCA9685::read(uint16_t* period_us, uint8_t len)
 {
     for (int i = 0; i < len; i++)
         period_us[i] = read(0 + i);
