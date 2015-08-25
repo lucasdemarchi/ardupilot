@@ -88,7 +88,7 @@ void LinuxRCOutput_Navio::init(void* machtnicht)
                                   "valid I2C semaphore!"));
         return; /* never reached */
     }
-    
+
     reset_all_channels();
 
     /* Set the initial frequency */
@@ -117,7 +117,6 @@ void LinuxRCOutput_Navio::reset_all_channels()
 
 void LinuxRCOutput_Navio::set_freq(uint32_t chmask, uint16_t freq_hz)
 {
-
     /* Correctly finish last pulses */
     for (int i = 0; i < PWM_CHAN_COUNT; i++) {
         write(i, _pulses_buffer[i]);
@@ -128,7 +127,7 @@ void LinuxRCOutput_Navio::set_freq(uint32_t chmask, uint16_t freq_hz)
     }
 
     /* Shutdown before sleeping.
-     * see p.14 of PCA9685 product datasheet 
+     * see p.14 of PCA9685 product datasheet
      */
     hal.i2c->writeRegister(PCA9685_ADDRESS, PCA9685_RA_ALL_LED_OFF_H, PCA9685_ALL_LED_OFF_H_SHUT);
 
@@ -235,7 +234,7 @@ uint16_t LinuxRCOutput_Navio::read(uint8_t ch)
 
 void LinuxRCOutput_Navio::read(uint16_t* period_us, uint8_t len)
 {
-    for (int i = 0; i < len; i++) 
+    for (int i = 0; i < len; i++)
         period_us[i] = read(0 + i);
 }
 
