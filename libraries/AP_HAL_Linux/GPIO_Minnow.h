@@ -1,0 +1,30 @@
+#pragma once
+
+#include "GPIO.h"
+#include "GPIO_Sysfs.h"
+
+enum AP_HAL::GPIO::VirtualPin : uint8_t {
+    MINNOW_SPI_CS,
+    MINNOW_SPI_MISO,
+    MINNOW_SPI_MOSI,
+    MINNOW_SPI_CLK,
+    MINNOW_I2C_SCL,
+    MINNOW_I2C_SDA,
+    MINNOW_UART2_TXD,
+    MINNOW_UART2_RXD,
+    MINNOW_S5_0,
+    MINNOW_S5_1,
+    MINNOW_S5_2,
+    MINNOW_UART1_TXD,
+    MINNOW_UART1_RXD,
+    MINNOW_UART1_CTS,
+    MINNOW_UART1_RTS,
+    MINNOW_I2S_CLK,
+    MINNOW_I2S_FRM,
+    MINNOW_I2S_DO,
+    MINNOW_I2S_DI,
+    MINNOW_PWM0,
+    MINNOW_PWM1,
+    MINNOW_IBL_8254,
+    _MINNOW_MAX,
+};
