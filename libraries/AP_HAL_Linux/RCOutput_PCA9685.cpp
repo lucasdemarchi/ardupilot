@@ -2,7 +2,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include "GPIO.h"
 
-#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO
+#if CONFIG_HAL_BOARD == HAL_BOARD_LINUX
 
 #include "RCOutput_PCA9685.h"
 #include <sys/types.h>
@@ -238,4 +238,4 @@ void RCOutput_PCA9685::read(uint16_t* period_us, uint8_t len)
         period_us[i] = read(0 + i);
 }
 
-#endif // CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO
+#endif
