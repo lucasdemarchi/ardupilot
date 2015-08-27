@@ -116,6 +116,8 @@ static RCOutput_PCA9685 rcoutDriver(true, 3, RPI_GPIO_27);
 static LinuxRCOutput_ZYNQ rcoutDriver;
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP
 static LinuxRCOutput_Bebop rcoutDriver;
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+static RCOutput_PCA9685 rcoutDriver(false, 0, AP_HAL::GPIO::VirtualPin::MINNOW_S5_1);
 #else
 static Empty::EmptyRCOutput rcoutDriver;
 #endif
