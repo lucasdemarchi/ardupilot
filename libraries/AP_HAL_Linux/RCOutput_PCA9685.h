@@ -5,9 +5,11 @@
 #include "AP_HAL_Linux.h"
 
 class Linux::RCOutput_PCA9685 : public AP_HAL::RCOutput {
-    public:
+public:
     RCOutput_PCA9685(bool external_clock, uint8_t channel_offset,
                      uint8_t oe_pin_number);
+    RCOutput_PCA9685(bool external_clock, uint8_t channel_offset,
+                     AP_HAL::GPIO::VirtualPin oe_pin_number);
     ~RCOutput_PCA9685();
     void     init(void* machtnichts);
     void     reset_all_channels();
@@ -21,6 +23,7 @@ class Linux::RCOutput_PCA9685 : public AP_HAL::RCOutput {
     void     read(uint16_t* period_us, uint8_t len);
 
 private:
+    RCOutput_PCA9685(bool external_clock, uint8_t channel_offset);
     void reset();
 
     AP_HAL::Semaphore *_i2c_sem;
@@ -33,7 +36,14 @@ private:
 
     bool _external_clock;
     uint8_t _channel_offset;
-    uint8_t _oe_pin_number;
+
+    struct {
+        bool virt;
+        union {
+            AP_HAL::GPIO::VirtualPin vpin;
+            uint8_t pin;
+        };
+    } _oe_pin;
 };
 
 #endif // __AP_HAL_LINUX_RCOUTPUT_NAVIO_H__
