@@ -4,10 +4,11 @@
 
 #include "AP_HAL_Linux.h"
 
-class Linux::LinuxRCOutput_Navio : public AP_HAL::RCOutput {
+class Linux::RCOutput_PCA9685 : public AP_HAL::RCOutput {
     public:
-    LinuxRCOutput_Navio();
-    ~LinuxRCOutput_Navio();
+    RCOutput_PCA9685(bool external_clock, uint8_t channel_offset,
+                     uint8_t oe_pin_number);
+    ~RCOutput_PCA9685();
     void     init(void* machtnichts);
     void     reset_all_channels();
     void     set_freq(uint32_t chmask, uint16_t freq_hz);
@@ -23,11 +24,16 @@ private:
     void reset();
 
     AP_HAL::Semaphore *_i2c_sem;
-    AP_HAL::DigitalSource *enable_pin;
+    AP_HAL::DigitalSource *_enable_pin;
     uint16_t _frequency;
+    float _osc_clock;
 
     uint16_t _pending_write_mask;
     uint16_t *_pulses_buffer;
+
+    bool _external_clock;
+    uint8_t _channel_offset;
+    uint8_t _oe_pin_number;
 };
 
 #endif // __AP_HAL_LINUX_RCOUTPUT_NAVIO_H__

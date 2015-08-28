@@ -31,7 +31,7 @@ namespace Linux {
     class LinuxRCInput_ZYNQ;
     class LinuxRCOutput_PRU;
     class LinuxRCOutput_AioPRU;
-    class LinuxRCOutput_Navio;
+    class RCOutput_PCA9685;
     class LinuxRCOutput_ZYNQ;
     class LinuxRCOutput_Bebop;
     class LinuxSemaphore;

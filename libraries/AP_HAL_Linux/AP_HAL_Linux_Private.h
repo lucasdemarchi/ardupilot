@@ -20,7 +20,7 @@
 #include "RCInput_UART.h"
 #include "RCOutput_PRU.h"
 #include "RCOutput_AioPRU.h"
-#include "RCOutput_Navio.h"
+#include "RCOutput_PCA9685.h"
 #include "RCOutput_ZYNQ.h"
 #include "RCOutput_Bebop.h"
 #include "Semaphores.h"
