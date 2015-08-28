@@ -59,20 +59,36 @@ using namespace Linux;
 static const AP_HAL::HAL& hal = AP_HAL_BOARD_DRIVER;
 
 RCOutput_PCA9685::RCOutput_PCA9685(bool external_clock,
-                                   uint8_t channel_offset,
-                                   uint8_t oe_pin_number) :
+                                   uint8_t channel_offset) :
     _i2c_sem(NULL),
     _enable_pin(NULL),
     _frequency(50),
     _pulses_buffer(new uint16_t[PWM_CHAN_COUNT]),
     _external_clock(external_clock),
-    _channel_offset(channel_offset),
-    _oe_pin_number(oe_pin_number)
+    _channel_offset(channel_offset)
 {
     if (_external_clock)
         _osc_clock = PCA9685_EXTERNAL_CLOCK;
     else
         _osc_clock = PCA9685_INTERNAL_CLOCK;
+}
+
+RCOutput_PCA9685::RCOutput_PCA9685(bool external_clock,
+                                   uint8_t channel_offset,
+                                   uint8_t oe_pin_number)
+    : RCOutput_PCA9685(external_clock, channel_offset)
+{
+    _oe_pin.virt = false;
+    _oe_pin.pin = oe_pin_number;
+}
+
+RCOutput_PCA9685::RCOutput_PCA9685(bool external_clock,
+                                   uint8_t channel_offset,
+                                   AP_HAL::GPIO::VirtualPin oe_pin_number)
+    : RCOutput_PCA9685(external_clock, channel_offset)
+{
+    _oe_pin.virt = true;
+    _oe_pin.vpin = oe_pin_number;
 }
 
 RCOutput_PCA9685::~RCOutput_PCA9685()
@@ -95,7 +111,11 @@ void RCOutput_PCA9685::init(void* machtnicht)
     set_freq(0, 50);
 
     /* Enable PCA9685 PWM */
-    _enable_pin = hal.gpio->channel(_oe_pin_number);
+    if (_oe_pin.virt)
+        _enable_pin = hal.gpio->channel(_oe_pin.vpin);
+    else
+        _enable_pin = hal.gpio->channel(_oe_pin.pin);
+
     _enable_pin->mode(HAL_GPIO_OUTPUT);
     _enable_pin->write(0);
 }

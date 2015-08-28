@@ -34,6 +34,19 @@ static LinuxI2CDriver  i2cDriver2(&i2cSemaphore2, "/dev/i2c-2");
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BBBMINI
 static LinuxSemaphore  i2cSemaphore0;
 static LinuxI2CDriver  i2cDriver0(&i2cSemaphore0, "/dev/i2c-2");
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+static LinuxSemaphore  i2cSemaphore0;
+static const char * const i2c_devpaths[] = {
+    /* UEFI with lpss set to ACPI */
+    "/devices/platform/80860F41:05",
+    /* UEFI with lpss set to PCI */
+    "/devices/pci0000:00/0000:00:18.6",
+    NULL
+};
+static LinuxI2CDriver  i2cDriver0(&i2cSemaphore0, i2c_devpaths);
+/* One additional emulated bus */
+static LinuxSemaphore  i2cSemaphore1;
+static LinuxI2CDriver  i2cDriver1(&i2cSemaphore1, "/dev/i2c-10");
 #else
 static LinuxSemaphore  i2cSemaphore0;
 static LinuxI2CDriver  i2cDriver0(&i2cSemaphore0, "/dev/i2c-1");
@@ -64,6 +77,8 @@ static LinuxGPIO_BBB gpioDriver;
  */
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO
 static LinuxGPIO_RPI gpioDriver;
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+static LinuxGPIO_Sysfs gpioDriver;
 #else
 static Empty::EmptyGPIO gpioDriver;
 #endif
@@ -79,6 +94,8 @@ static LinuxRCInput_AioPRU rcinDriver;
 static LinuxRCInput_Navio rcinDriver;
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_ZYNQ
 static LinuxRCInput_ZYNQ rcinDriver;
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+static LinuxRCInput_UART rcinDriver;
 #else
 static LinuxRCInput rcinDriver;
 #endif
@@ -99,6 +116,8 @@ static RCOutput_PCA9685 rcoutDriver(true, 3, RPI_GPIO_27);
 static LinuxRCOutput_ZYNQ rcoutDriver;
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP
 static LinuxRCOutput_Bebop rcoutDriver;
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+static RCOutput_PCA9685 rcoutDriver(false, 0, AP_HAL::GPIO::VirtualPin::MINNOW_S5_1);
 #else
 static Empty::EmptyRCOutput rcoutDriver;
 #endif
@@ -117,6 +136,10 @@ HAL_Linux::HAL_Linux() :
         &i2cDriver0,
         &i2cDriver1,
         &i2cDriver2,
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+        &i2cDriver0,
+        &i2cDriver1,
+        NULL,
 #else
         &i2cDriver0,
         NULL,
@@ -205,6 +228,9 @@ void HAL_Linux::init(int argc,char* const argv[]) const
     i2c->begin();
     i2c1->begin();
     i2c2->begin();
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+    i2c->begin();
+    i2c1->begin();
 #else
     i2c->begin();
 #endif

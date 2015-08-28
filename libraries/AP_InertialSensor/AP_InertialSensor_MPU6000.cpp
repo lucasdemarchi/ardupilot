@@ -672,6 +672,9 @@ bool AP_InertialSensor_MPU6000::update( void )
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP
     accel.rotate(ROTATION_YAW_270);
     gyro.rotate(ROTATION_YAW_270);
+#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+    accel.rotate(ROTATION_YAW_90);
+    gyro.rotate(ROTATION_YAW_90);
 #endif
 
     _publish_accel(_accel_instance, accel);
