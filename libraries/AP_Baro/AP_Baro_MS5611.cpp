@@ -76,10 +76,11 @@ uint32_t AP_SerialBus_SPI::read_24bits(uint8_t reg)
     return (((uint32_t)rx[1])<<16) | (((uint32_t)rx[2])<<8) | ((uint32_t)rx[3]);
 }
 
-void AP_SerialBus_SPI::write(uint8_t reg)
+bool AP_SerialBus_SPI::write(uint8_t reg)
 {
     uint8_t tx[1] = { reg };
     _spi->transaction(tx, NULL, 1);
+    return true;
 }
 
 bool AP_SerialBus_SPI::sem_take_blocking() 
@@ -132,9 +133,9 @@ uint32_t AP_SerialBus_I2C::read_24bits(uint8_t reg)
     return 0;
 }
 
-void AP_SerialBus_I2C::write(uint8_t reg)
+bool AP_SerialBus_I2C::write(uint8_t reg)
 {
-    _i2c->write(_addr, 1, &reg);
+    return _i2c->write(_addr, 1, &reg) == 0;
 }
 
 bool AP_SerialBus_I2C::sem_take_blocking() 
@@ -281,9 +282,11 @@ void AP_Baro_MS56XX::_timer(void)
                 _s_D2 >>= 1;
                 _d2_count = 16;
             }
+
+            if (_serial->write(CMD_CONVERT_D1_OSR4096)) {      // Command to read pressure
+                _state++;
+            }
         }
-        _state++;
-        _serial->write(CMD_CONVERT_D1_OSR4096);      // Command to read pressure
     } else {
         uint32_t d1 = _serial->read_24bits(0);;
         if (d1 != 0) {
@@ -300,13 +303,16 @@ void AP_Baro_MS56XX::_timer(void)
             }
             // Now a new reading exists
             _updated = true;
-        }
-        _state++;
-        if (_state == 5) {
-            _serial->write(CMD_CONVERT_D2_OSR4096); // Command to read temperature
-            _state = 0;
-        } else {
-            _serial->write(CMD_CONVERT_D1_OSR4096); // Command to read pressure
+
+            if (_state == 4) {
+                if (_serial->write(CMD_CONVERT_D2_OSR4096)) { // Command to read temperature
+                    _state = 0;
+                }
+            } else {
+                if (_serial->write(CMD_CONVERT_D1_OSR4096)) { // Command to read pressure
+                    _state++;
+                }
+            }
         }
     }
 
