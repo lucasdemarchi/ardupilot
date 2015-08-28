@@ -11,6 +11,7 @@
 
 #define LINUX_SCHEDULER_MAX_TIMER_PROCS 10
 #define LINUX_SCHEDULER_MAX_IO_PROCS 10
+#define LINUX_SCHEDULER_MAX_FIFO_PROCS 10
 
 class Linux::LinuxScheduler : public AP_HAL::Scheduler {
 
@@ -30,8 +31,11 @@ public:
 
     void     register_timer_process(AP_HAL::MemberProc);
     void     register_io_process(AP_HAL::MemberProc);
+    void     register_fifo_process(AP_HAL::MemberProc);
     void     suspend_timer_procs();
     void     resume_timer_procs();
+
+    AP_HAL::Semaphore *new_semaphore();
 
     bool     in_timerprocess();
 
@@ -69,6 +73,12 @@ private:
     uint8_t _num_io_procs;
     volatile bool _in_io_proc;
 
+    struct FifoProcArg {
+        LinuxScheduler *sched;
+        AP_HAL::MemberProc proc;
+    } _fifo_proc[LINUX_SCHEDULER_MAX_FIFO_PROCS];
+    uint8_t _num_fifo_procs;
+
     volatile bool _timer_event_missed;
 
     pthread_t _timer_thread_ctx;
@@ -79,6 +89,7 @@ private:
 
     static void *_timer_thread(void* arg);
     static void *_io_thread(void* arg);
+    static void *_fifo_thread(void* arg);
     static void *_rcin_thread(void* arg);
     static void *_uart_thread(void* arg);
     static void *_tonealarm_thread(void* arg);
@@ -86,7 +97,8 @@ private:
     void _run_timers(bool called_from_timer_thread);
     void _run_io(void);
     void _create_realtime_thread(pthread_t *ctx, int rtprio, const char *name,
-                                 pthread_startroutine_t start_routine);
+                                 pthread_startroutine_t start_routine,
+                                 void *arg);
 
     uint64_t stopped_clock_usec;
 

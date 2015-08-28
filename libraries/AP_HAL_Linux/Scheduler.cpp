@@ -47,7 +47,8 @@ LinuxScheduler::LinuxScheduler()
 
 void LinuxScheduler::_create_realtime_thread(pthread_t *ctx, int rtprio,
                                              const char *name,
-                                             pthread_startroutine_t start_routine)
+                                             pthread_startroutine_t start_routine,
+                                             void *arg)
 {
     struct sched_param param = { .sched_priority = rtprio };
     pthread_attr_t attr;
@@ -64,7 +65,7 @@ void LinuxScheduler::_create_realtime_thread(pthread_t *ctx, int rtprio,
         pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
         pthread_attr_setschedparam(&attr, &param);
     }
-    r = pthread_create(ctx, &attr, start_routine, this);
+    r = pthread_create(ctx, &attr, start_routine, arg);
     if (r != 0) {
         hal.console->printf("Error creating thread '%s': %s\n",
                             name, strerror(r));
@@ -126,7 +127,7 @@ void LinuxScheduler::init(void* machtnichts)
 
     for (iter = table; iter->ctx; iter++)
         _create_realtime_thread(iter->ctx, iter->rtprio, iter->name,
-                                iter->start_routine);
+                                iter->start_routine, this);
 }
 
 void LinuxScheduler::_microsleep(uint32_t usec)
@@ -236,6 +237,25 @@ void LinuxScheduler::register_io_process(AP_HAL::MemberProc proc)
     }
 }
 
+void LinuxScheduler::register_fifo_process(AP_HAL::MemberProc proc)
+{
+    char name[16];
+    pthread_t ctx;
+
+    if (_num_fifo_procs == LINUX_SCHEDULER_MAX_FIFO_PROCS) {
+        panic("Out of FIFO processes\n");
+    }
+
+    _fifo_proc[_num_fifo_procs].sched = this;
+    _fifo_proc[_num_fifo_procs].proc = proc;
+    sprintf(name, "fifo_thread_%u", _num_fifo_procs);
+
+    _create_realtime_thread(&ctx, APM_LINUX_TIMER_PRIORITY, name,
+                            &Linux::LinuxScheduler::_fifo_thread,
+                            _fifo_proc + _num_fifo_procs);
+    _num_fifo_procs++;
+}
+
 void LinuxScheduler::register_timer_failsafe(AP_HAL::Proc failsafe, uint32_t period_us)
 {
     _failsafe = failsafe;
@@ -251,6 +271,11 @@ void LinuxScheduler::suspend_timer_procs()
 void LinuxScheduler::resume_timer_procs()
 {
     _timer_semaphore.give();
+}
+
+AP_HAL::Semaphore *LinuxScheduler::new_semaphore()
+{
+    return new LinuxSemaphore();
 }
 
 void LinuxScheduler::_run_timers(bool called_from_timer_thread)
@@ -386,6 +411,19 @@ void *LinuxScheduler::_io_thread(void* arg)
 
         // run registered IO procepsses
         sched->_run_io();
+    }
+    return NULL;
+}
+
+void *LinuxScheduler::_fifo_thread(void* arg)
+{
+    struct FifoProcArg *args = (struct FifoProcArg *)arg;
+
+    while (args->sched->system_initializing()) {
+        poll(NULL, 0, 1);
+    }
+    while (true) {
+        args->proc();
     }
     return NULL;
 }

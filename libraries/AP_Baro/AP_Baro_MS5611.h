@@ -75,7 +75,19 @@ private:
 class AP_Baro_MS56XX : public AP_Baro_Backend
 {
 public:
-    AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial, bool use_timer);
+    enum ProducerType {
+        /* sensor data is produced by calling accumulate() or update() */
+        BARO,
+        /* sensor data is produced by scheduler timer routine */
+        TIMER,
+        /* sensor data is produced by a fifo process (please note that we're
+         * talking about *fifo process*, not storing data into a FIFO) */
+        FIFO_PROCESS
+    };
+
+    AP_Baro_MS56XX(AP_Baro &baro, AP_SerialBus *serial,
+                   enum ProducerType producer_type);
+
     void update();
     void accumulate();
 
@@ -86,6 +98,10 @@ private:
     bool _check_crc();
 
     void _timer();
+    void _fifo_process();
+
+    /* the engine for accumulating */
+    void _accumulate();
 
     /* Asynchronous state: */
     volatile bool            _updated;
@@ -95,19 +111,21 @@ private:
     uint8_t                  _state;
     uint32_t                 _last_timer;
 
-    bool _use_timer;
+    enum ProducerType _producer_type;
 
 protected:
     // Internal calibration registers
     uint16_t                 _C1,_C2,_C3,_C4,_C5,_C6;
     float                    _D1,_D2;
     uint8_t _instance;
+    AP_HAL::Semaphore        *_fifo_process_sem;
 };
 
 class AP_Baro_MS5611 : public AP_Baro_MS56XX
 {
 public:
-    AP_Baro_MS5611(AP_Baro &baro, AP_SerialBus *serial, bool use_timer);
+    AP_Baro_MS5611(AP_Baro &baro, AP_SerialBus *serial,
+                   enum ProducerType producer_type);
 private:
     void _calculate();
 };
@@ -115,7 +133,8 @@ private:
 class AP_Baro_MS5607 : public AP_Baro_MS56XX
 {
 public:
-    AP_Baro_MS5607(AP_Baro &baro, AP_SerialBus *serial, bool use_timer);
+    AP_Baro_MS5607(AP_Baro &baro, AP_SerialBus *serial,
+                   enum ProducerType producer_type);
 private:
     void _calculate();
 };
