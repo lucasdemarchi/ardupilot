@@ -274,6 +274,11 @@ void Scheduler::resume_timer_procs()
     _timer_semaphore.give();
 }
 
+AP_HAL::Semaphore *Scheduler::new_semaphore()
+{
+    return new Semaphore();
+}
+
 void Scheduler::_run_timers(bool called_from_timer_thread)
 {
     if (_in_timer_proc) {
