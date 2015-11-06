@@ -15,7 +15,7 @@ public:
         INVERSE = 1,
     };
 
-    void enable(bool enable);
+    void enable(bool value);
     bool is_enabled();
     void set_period(uint32_t nsec_period);
     uint32_t get_period();
@@ -32,5 +32,3 @@ private:
     const uint16_t _channel;
     const uint8_t _chip;
 };
-
-
