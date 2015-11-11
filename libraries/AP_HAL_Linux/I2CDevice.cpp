@@ -1,11 +1,18 @@
 #include "I2CDevice.h"
 
+#include <algorithm>
+#include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
 #include <AP_HAL/AP_HAL.h>
+
+#include "Util.h"
 
 namespace Linux {
 
@@ -30,7 +37,15 @@ public:
             return -EBUSY;
         }
 
-        // TODO: open the bus
+        r = snprintf(path, sizeof(path), "/dev/i2c-%u", n);
+        if (r < 0 || r >= (int)sizeof(path)) {
+            return -EINVAL;
+        }
+
+        fd = ::open(path, O_RDWR | O_CLOEXEC);
+        if (fd < 0) {
+            return -errno;
+        }
 
         bus = n;
 
@@ -76,7 +91,61 @@ I2CDeviceManager::I2CDeviceManager()
 AP_HAL::OwnPtr<AP_HAL::I2CDevice>
 I2CDeviceManager::get_device(std::vector<const char *> devpaths, uint8_t address)
 {
-    // TODO: implement device search on sysfs
+    const char *dirname = "/sys/class/i2c-dev";
+    struct dirent *de = nullptr;
+    DIR *d;
+
+    d = opendir(dirname);
+    if (!d) {
+        AP_HAL::panic("Could not get list of I2C buses");
+    }
+
+    for (de = readdir(d); de; de = readdir(d)) {
+        char *str_device, *abs_str_device;
+
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) {
+            continue;
+        }
+
+        if (asprintf(&str_device, "%s/%s", dirname, de->d_name) < 0) {
+            continue;
+        }
+
+        abs_str_device = realpath(str_device, nullptr);
+        if (!abs_str_device || strncmp(abs_str_device, "/sys", sizeof("/sys") - 1)) {
+            free(abs_str_device);
+            free(str_device);
+            continue;
+        }
+
+        auto t = std::find_if(std::begin(devpaths), std::end(devpaths),
+                              [abs_str_device](const char *v) {
+                                  return strncmp(abs_str_device + sizeof("/sys") - 1, v, strlen(v)) == 0;
+                              });
+
+        free(abs_str_device);
+        free(str_device);
+
+        if (t != std::end(devpaths)) {
+            unsigned int n;
+
+            /* Found the bus, try to create the device now */
+            if (sscanf(de->d_name, "i2c-%u", &n) != 1) {
+                AP_HAL::panic("I2CDevice: can't parse %s", de->d_name);
+            }
+            if (n > UINT8_MAX) {
+                AP_HAL::panic("I2CDevice: bus with number n=%u higher than %u",
+                              n, UINT8_MAX);
+            }
+
+            closedir(d);
+            return get_device(n, address);
+        }
+    }
+
+    /* not found */
+    closedir(d);
+    return nullptr;
 }
 
 AP_HAL::OwnPtr<AP_HAL::I2CDevice>
