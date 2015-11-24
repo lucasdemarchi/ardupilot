@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0, 'Tools/ardupilotwaf/')
 
 import ardupilotwaf
+from board import Board, board
 import waflib
 
 # TODO: implement a command 'waf help' that shows the basic tasks a
@@ -79,72 +80,55 @@ PROJECT_CONFIG = dict(
 # NOTE: Keeping all the board definitions together so we can easily
 # identify opportunities to simplify how it works. In the future might
 # be worthy to keep board definitions in files of their own.
-BOARDS = {
-    'sitl': dict(
-        DEFINES=[
-            'CONFIG_HAL_BOARD=HAL_BOARD_SITL',
-            'CONFIG_HAL_BOARD_SUBTYPE=HAL_BOARD_SUBTYPE_NONE',
-        ],
+@board()
+def sitl(board):
+    board.DEFINES(
+        CONFIG_HAL_BOARD='HAL_BOARD_SITL',
+        CONFIG_HAL_BOARD_SUBTYPE='HAL_BOARD_SUBTYPE_NONE',
+    )
 
-        CXXFLAGS=[
-            '-O3'
-        ],
+    board.CXXFLAGS(
+        '-O3'
+    )
 
-        LIB=[
-            'm',
-            'pthread',
-        ],
+    board.LIB(
+        'm',
+        'pthread',
+    )
 
-        AP_LIBRARIES=[
-            'AP_HAL_SITL',
-            'SITL',
-        ],
-    ),
+    board.AP_LIBRARIES(
+        'AP_HAL_SITL',
+        'SITL',
+    )
 
-    'linux': dict(
-        DEFINES=[
-            'CONFIG_HAL_BOARD=HAL_BOARD_LINUX',
-            'CONFIG_HAL_BOARD_SUBTYPE=HAL_BOARD_SUBTYPE_LINUX_NONE',
-        ],
+@board()
+def linux(board):
+    board.DEFINES(
+        CONFIG_HAL_BOARD='HAL_BOARD_LINUX',
+        CONFIG_HAL_BOARD_SUBTYPE='HAL_BOARD_SUBTYPE_LINUX_NONE',
+    )
 
-        CXXFLAGS=[
-            '-O3'
-        ],
+    board.CXXFLAGS(
+        '-O3'
+    )
 
-        LIB=[
-            'm',
-            'pthread',
-            'rt',
-        ],
+    board.LIB(
+        'm',
+        'pthread',
+        'rt',
+    )
 
-        AP_LIBRARIES=[
-            'AP_HAL_Linux',
-        ],
-    ),
+    board.AP_LIBRARIES(
+        'AP_HAL_Linux',
+    )
 
-    'minlure': dict(
-        DEFINES=[
-            'CONFIG_HAL_BOARD=HAL_BOARD_LINUX',
-            'CONFIG_HAL_BOARD_SUBTYPE=HAL_BOARD_SUBTYPE_LINUX_MINLURE',
-        ],
+@board(linux)
+def minlure(board):
+    board.DEFINES(
+        CONFIG_HAL_BOARD_SUBTYPE='HAL_BOARD_SUBTYPE_LINUX_MINLURE',
+    )
 
-        CXXFLAGS=[
-            '-O3'
-        ],
-
-        LIB=[
-            'm',
-            'pthread',
-            'rt',
-        ],
-
-        AP_LIBRARIES=[
-            'AP_HAL_Linux',
-        ],
-    ),
-}
-
-BOARDS_NAMES = sorted(list(BOARDS.keys()))
+BOARDS_NAMES = Board.names()
 
 def options(opt):
     opt.load('compiler_cxx compiler_c waf_unit_test')
@@ -180,7 +164,7 @@ def configure(cfg):
 
     cfg.msg('Setting board to', cfg.options.board)
     cfg.env.BOARD = cfg.options.board
-    board = BOARDS[cfg.env.BOARD]
+    board = Board.get(cfg.env.BOARD).compile()
 
     # Always prepend so that arguments passed in the command line get the
     # priority. Board configuration gets priority over the project
