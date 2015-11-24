@@ -9,4 +9,4 @@
 	url = git://github.com/diydrones/uavcan.git
 [submodule "modules/gbenchmark"]
 	path = modules/gbenchmark
-	url = git@github.com:google/benchmark.git
+	url = git://github.com/google/benchmark.git
