@@ -81,7 +81,7 @@ PROJECT_CONFIG = dict(
 # NOTE: Keeping all the board definitions together so we can easily
 # identify opportunities to simplify how it works. In the future might
 # be worthy to keep board definitions in files of their own.
-@board.board()
+@board.inherit()
 def sitl(board):
     board.DEFINES(
         CONFIG_HAL_BOARD='HAL_BOARD_SITL',
@@ -102,7 +102,7 @@ def sitl(board):
         'SITL',
     )
 
-@board.board()
+@board.inherit()
 def linux(board):
     board.DEFINES(
         CONFIG_HAL_BOARD='HAL_BOARD_LINUX',
@@ -123,7 +123,7 @@ def linux(board):
         'AP_HAL_Linux',
     )
 
-@board.board(linux)
+@board.inherit(linux)
 def minlure(board):
     board.DEFINES(
         CONFIG_HAL_BOARD_SUBTYPE='HAL_BOARD_SUBTYPE_LINUX_MINLURE',

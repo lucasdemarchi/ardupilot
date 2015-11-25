@@ -88,7 +88,7 @@ class Board(object):
 
         return d
 
-def board(base=Board):
+def inherit(base=Board):
     """
     Create a decorator that receives a constructor function and creates a class
     representing a board. The class created inherits from the class pointed by
@@ -108,7 +108,7 @@ def board(base=Board):
 
     Is equivalent to::
 
-       @board()
+       @board.inherit()
        def my_board(board):
            board.DEFINES(
                DEBUG='1',
