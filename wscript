@@ -31,128 +31,129 @@ import waflib
 # contain the board extension so make it less convenient, maybe hook
 # to support automatic filling this extension?
 
-PROJECT_CONFIG = dict(
-    CFLAGS=[
-        '-ffunction-sections',
-        '-fdata-sections',
-        '-fsigned-char',
+PROJECT_ENV = waflib.ConfigSet.ConfigSet()
 
-        '-Wformat',
-        '-Wall',
-        '-Wshadow',
-        '-Wpointer-arith',
-        '-Wcast-align',
-        '-Wno-unused-parameter',
-        '-Wno-missing-field-initializers',
-    ],
+# Use a dictionary instead of the convetional list for definitions to
+# make easy to override them. Convert back to list before consumption.
+PROJECT_ENV.DEFINES = {}
 
-    CXXFLAGS=[
-        '-std=gnu++11',
+PROJECT_ENV.CFLAGS += [
+    '-ffunction-sections',
+    '-fdata-sections',
+    '-fsigned-char',
 
-        '-fdata-sections',
-        '-ffunction-sections',
-        '-fno-exceptions',
-        '-fsigned-char',
+    '-Wformat',
+    '-Wall',
+    '-Wshadow',
+    '-Wpointer-arith',
+    '-Wcast-align',
+    '-Wno-unused-parameter',
+    '-Wno-missing-field-initializers',
+]
 
-        '-Wformat',
-        '-Wall',
-        '-Wshadow',
-        '-Wpointer-arith',
-        '-Wcast-align',
-        '-Wno-unused-parameter',
-        '-Wno-missing-field-initializers',
-        '-Wno-reorder',
-        '-Werror=format-security',
-        '-Werror=array-bounds',
-        '-Wfatal-errors',
-        '-Werror=unused-but-set-variable',
-        '-Werror=uninitialized',
-        '-Werror=init-self',
-        '-Wno-missing-field-initializers',
-    ],
+PROJECT_ENV.CXXFLAGS += [
+    '-std=gnu++11',
 
-    LINKFLAGS=[
-        '-Wl,--gc-sections',
-    ],
-)
+    '-fdata-sections',
+    '-ffunction-sections',
+    '-fno-exceptions',
+    '-fsigned-char',
+
+    '-Wformat',
+    '-Wall',
+    '-Wshadow',
+    '-Wpointer-arith',
+    '-Wcast-align',
+    '-Wno-unused-parameter',
+    '-Wno-missing-field-initializers',
+    '-Wno-reorder',
+    '-Werror=format-security',
+    '-Werror=array-bounds',
+    '-Wfatal-errors',
+    '-Werror=unused-but-set-variable',
+    '-Werror=uninitialized',
+    '-Werror=init-self',
+    '-Wno-missing-field-initializers',
+]
+
+PROJECT_ENV.LINKFLAGS += [
+    '-Wl,--gc-sections',
+]
 
 # NOTE: Keeping all the board definitions together so we can easily
-# identify opportunities to simplify how it works. In the future might
+# identify opportunities to simplify common flags. In the future might
 # be worthy to keep board definitions in files of their own.
-BOARDS = {
-    'sitl': dict(
-        DEFINES=[
-            'CONFIG_HAL_BOARD=HAL_BOARD_SITL',
-            'CONFIG_HAL_BOARD_SUBTYPE=HAL_BOARD_SUBTYPE_NONE',
-        ],
+def setup_boards():
+    boards = {}
 
-        CXXFLAGS=[
-            '-O3'
-        ],
+    def create_env(name, parent=PROJECT_ENV):
+        env = parent.derive().detach()
+        if name in boards:
+            print("Multiple definitions of " + name)
+            sys.exit(1)
+        boards[name] = env
+        return env
 
-        LIB=[
-            'm',
-            'pthread',
-        ],
+    sitl = create_env('sitl')
+    sitl.DEFINES.update(
+        CONFIG_HAL_BOARD = 'HAL_BOARD_SITL',
+        CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_NONE',
+    )
 
-        AP_LIBRARIES=[
-            'AP_HAL_SITL',
-            'SITL',
-        ],
-    ),
+    sitl.CXXFLAGS += [
+        '-O3',
+    ]
 
-    'linux': dict(
-        DEFINES=[
-            'CONFIG_HAL_BOARD=HAL_BOARD_LINUX',
-            'CONFIG_HAL_BOARD_SUBTYPE=HAL_BOARD_SUBTYPE_LINUX_NONE',
-        ],
+    sitl.LIB += [
+        'm',
+        'pthread',
+    ]
 
-        CXXFLAGS=[
-            '-O3'
-        ],
+    sitl.AP_LIBRARIES += [
+        'AP_HAL_SITL',
+        'SITL',
+    ]
 
-        LIB=[
-            'm',
-            'pthread',
-            'rt',
-        ],
 
-        AP_LIBRARIES=[
-            'AP_HAL_Linux',
-        ],
-    ),
+    linux = create_env('linux')
+    sitl.DEFINES.update(
+        CONFIG_HAL_BOARD = 'HAL_BOARD_LINUX',
+        CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_LINUX_NONE',
+    )
 
-    'minlure': dict(
-        DEFINES=[
-            'CONFIG_HAL_BOARD=HAL_BOARD_LINUX',
-            'CONFIG_HAL_BOARD_SUBTYPE=HAL_BOARD_SUBTYPE_LINUX_MINLURE',
-        ],
+    linux.CXXFLAGS += [
+        '-O3',
+    ]
 
-        CXXFLAGS=[
-            '-O3'
-        ],
+    linux.LIB += [
+        'm',
+        'pthread',
+        'rt',
+    ]
 
-        LIB=[
-            'm',
-            'pthread',
-            'rt',
-        ],
+    linux.AP_LIBRARIES = [
+        'AP_HAL_Linux',
+    ]
 
-        AP_LIBRARIES=[
-            'AP_HAL_Linux',
-        ],
-    ),
-}
 
-BOARDS_NAMES = sorted(list(BOARDS.keys()))
+    minlure = create_env('minlure', linux)
+    minlure.DEFINES.update(
+        CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_LINUX_MINLURE',
+    )
+
+    return boards
+
+BOARDS = setup_boards()
 
 def options(opt):
+    boards_names = sorted(list(BOARDS.keys()))
+
     opt.load('compiler_cxx compiler_c waf_unit_test')
     opt.add_option('--board',
                    action='store',
-                   choices=BOARDS_NAMES,
+                   choices=boards_names,
                    default='sitl',
-                   help='Target board to build, choices are %s' % BOARDS_NAMES)
+                   help='Target board to build, choices are %s' % boards_names)
 
     g = opt.add_option_group('Check options')
     g.add_option('--check-verbose',
@@ -180,15 +181,19 @@ def configure(cfg):
 
     cfg.msg('Setting board to', cfg.options.board)
     cfg.env.BOARD = cfg.options.board
-    board = BOARDS[cfg.env.BOARD]
+    board_dict = BOARDS[cfg.env.BOARD].get_merged_dict()
 
-    # Always prepend so that arguments passed in the command line get the
-    # priority. Board configuration gets priority over the project
-    # configuration.
-    for k in board.keys():
-        cfg.env.prepend_value(k, board[k])
-    for k in PROJECT_CONFIG.keys():
-        cfg.env.prepend_value(k, PROJECT_CONFIG[k])
+    # Always prepend so that arguments passed in the command line get
+    # the priority.
+    for k in board_dict:
+        val = board_dict[k]
+        # Dictionaries (like 'DEFINES') are converted to lists to
+        # conform to waf conventions.
+        if isinstance(val, dict):
+            for item in val.items():
+                cfg.env.prepend_value(k, '%s=%s' % item)
+        else:
+            cfg.env.prepend_value(k, val)
 
     cfg.env.prepend_value('INCLUDES', [
         cfg.srcnode.abspath() + '/libraries/'
