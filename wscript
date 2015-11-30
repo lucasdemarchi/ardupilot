@@ -210,7 +210,7 @@ def collect_dirs_to_recurse(bld, globs, **kw):
             dirs.append(d.parent.relpath())
     return dirs
 
-def boards(ctx):
+def list_boards(ctx):
     print(*BOARDS_NAMES)
 
 def build(bld):

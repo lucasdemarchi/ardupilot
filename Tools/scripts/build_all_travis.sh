@@ -34,7 +34,7 @@ build_concurrency=(["navio"]="-j2"
 build_extra_clean=(["px4-v2"]="make px4-cleandep")
 
 # get list of boards supported by the waf build
-for board in $(./waf boards | head -n1); do waf_supported_boards[$board]=1; done
+for board in $(./waf list_boards | head -n1); do waf_supported_boards[$board]=1; done
 
 echo "Targets: $TRAVIS_BUILD_TARGET"
 for t in $TRAVIS_BUILD_TARGET; do
