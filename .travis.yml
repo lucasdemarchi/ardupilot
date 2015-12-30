@@ -17,6 +17,7 @@ addons:
     - gcc-4.8
     - genromfs
     - libc6-i386
+    - libgtest-dev
     - python-argparse
     - python-empy
     - python-serial

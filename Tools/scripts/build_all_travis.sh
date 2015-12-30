@@ -15,6 +15,7 @@ fi
 declare -A build_platforms
 declare -A build_concurrency
 declare -A build_extra_clean
+declare -A build_extra_cmd
 declare -A waf_supported_boards
 
 build_platforms=(  ["ArduPlane"]="navio raspilot minlure bebop sitl linux px4-v2"
@@ -33,6 +34,8 @@ build_concurrency=(["navio"]="-j2"
                    ["px4-v4"]="")
 
 build_extra_clean=(["px4-v2"]="make px4-cleandep")
+
+build_extra_cmd=(["linux"]="check")
 
 waf=modules/waf/waf-light
 
@@ -63,5 +66,8 @@ for t in $TRAVIS_BUILD_TARGET; do
         $waf configure --board $t
         $waf clean
         $waf ${build_concurrency[$t]} build
+        if [ ${build_extra_cmd[$t]+_} ]; then
+            $waf ${build_concurrency[$t]} ${build_extra_cmd[$t]}
+        fi
     fi
 done
