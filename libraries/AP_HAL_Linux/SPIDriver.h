@@ -46,7 +46,7 @@ private:
     uint32_t _highspeed;
     uint32_t _speed;
     enum AP_HAL::SPIDeviceType _type;
-    int _fd;	// Per-device FD.
+    AP_HAL::OwnPtr<AP_HAL::SPIDevice> _fake_dev;
 };
 
 class SPIDeviceManager : public AP_HAL::SPIDeviceManager {
@@ -66,10 +66,11 @@ public:
 
     AP_HAL::OwnPtr<AP_HAL::SPIDevice> get_device(const char *name);
 
+    // Temporary function to interoperate with SPIDeviceDriver interface
+    AP_HAL::OwnPtr<AP_HAL::SPIDevice> get_device(SPIDeviceDriver &desc);
+
     void init();
     AP_HAL::SPIDeviceDriver* device(enum AP_HAL::SPIDeviceType, uint8_t index = 0);
-
-    static AP_HAL::Semaphore *get_semaphore(uint16_t bus);
 
     static void cs_assert(enum AP_HAL::SPIDeviceType type);
     static void cs_release(enum AP_HAL::SPIDeviceType type);
@@ -83,7 +84,6 @@ protected:
 
     static const uint8_t _n_device_desc;
     static SPIDeviceDriver _device[];
-    static Semaphore _semaphore[LINUX_SPI_MAX_BUSES];
 };
 
 }

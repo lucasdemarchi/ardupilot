@@ -168,7 +168,6 @@ int SPIDevice::get_fd()
 AP_HAL::OwnPtr<AP_HAL::SPIDevice>
 SPIDeviceManager::get_device(const char *name)
 {
-    SPIBus *b = nullptr;
     SPIDeviceDriver *desc = nullptr;
 
     /* Find the bus description in the table */
@@ -183,10 +182,18 @@ SPIDeviceManager::get_device(const char *name)
         AP_HAL::panic("SPI: invalid device name");
     }
 
+    return get_device(*desc);
+}
+
+AP_HAL::OwnPtr<AP_HAL::SPIDevice>
+SPIDeviceManager::get_device(SPIDeviceDriver &desc)
+{
+    SPIBus *b = nullptr;
+
     /* Find if bus is already open */
     for (uint8_t i = 0, n = _buses.size(); i < n; i++) {
-        if (_buses[i]->bus == desc->_bus &&
-            _buses[i]->kernel_cs == desc->_subdev) {
+        if (_buses[i]->bus == desc._bus &&
+            _buses[i]->kernel_cs == desc._subdev) {
             b = _buses[i];
             break;
         }
@@ -197,7 +204,7 @@ SPIDeviceManager::get_device(const char *name)
      * bus instance
      */
     if (b) {
-        return _create_device(*b, *desc);
+        return _create_device(*b, desc);
     }
 
     b = new SPIBus();
@@ -205,12 +212,12 @@ SPIDeviceManager::get_device(const char *name)
         return nullptr;
     }
 
-    if (b->open(desc->_bus, desc->_subdev) < 0) {
+    if (b->open(desc._bus, desc._subdev) < 0) {
         delete b;
         return nullptr;
     }
 
-    auto dev = _create_device(*b, *desc);
+    auto dev = _create_device(*b, desc);
     if (!dev) {
         delete b;
         return nullptr;
