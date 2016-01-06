@@ -14,14 +14,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __OREOLED_PX4_H__
-#define __OREOLED_PX4_H__
-
-#if CONFIG_HAL_BOARD == HAL_BOARD_PX4
+#pragma once
 
 #include <AP_HAL/AP_HAL.h>
-#include "NotifyDevice.h"
+
+#if CONFIG_HAL_BOARD == HAL_BOARD_PX4
 #include <drivers/drv_oreoled.h>
+
+#include "NotifyDevice.h"
 
 #define OREOLED_NUM_LEDS        4       // maximum number of individual LEDs connected to the oreo led cpu
 #define OREOLED_INSTANCE_ALL    0xff    // instance number to indicate all LEDs (used for set_rgb and set_macro)
@@ -91,7 +91,3 @@ private:
     oreo_state _state_sent[OREOLED_NUM_LEDS];       // last state sent to led
     uint8_t _pattern_override;                      // holds last processed pattern override, 0 if we are not overriding a pattern
 };
-
-#endif // CONFIG_HAL_BOARD == HAL_BOARD_PX4
-
-#endif // __OREOLED_PX4_H__

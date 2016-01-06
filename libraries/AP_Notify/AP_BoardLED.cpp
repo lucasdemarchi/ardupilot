@@ -14,8 +14,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-#include "AP_Notify.h"
+#include "AP_BoardLED.h"
 
 #if (defined(HAL_GPIO_A_LED_PIN) && defined(HAL_GPIO_B_LED_PIN) && \
      defined(HAL_GPIO_C_LED_PIN))
