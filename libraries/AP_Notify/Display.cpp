@@ -22,6 +22,9 @@
 
 #include "AP_Notify.h"
 
+#define ROW(Y) ((Y * 11) + 2)
+#define COLUMN(X) ((X * 7) + 1)
+
 static const uint8_t _font[] = {
     0x00, 0x00, 0x00, 0x00, 0x00,
     0x3E, 0x5B, 0x4F, 0x5B, 0x3E,

@@ -18,6 +18,11 @@
 
 #include <AP_HAL/AP_HAL.h>
 
+#define SSD1306_I2C_ADDRESS 0x3C    // default I2C bus address
+#define SSD1306_ROWS 128            // display rows
+#define SSD1306_COLUMNS 64          // display columns
+#define SSD1306_COLUMNS_PER_PAGE 8
+
 static const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 bool Display_SSD1306_I2C::hw_init()

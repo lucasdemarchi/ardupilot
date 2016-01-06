@@ -4,9 +4,6 @@
 
 #include "NotifyDevice.h"
 
-#define ROW(Y) ((Y * 11) + 2)
-#define COLUMN(X) ((X * 7) + 1)
-
 class Display: public NotifyDevice {
 public:
     bool init(void);
