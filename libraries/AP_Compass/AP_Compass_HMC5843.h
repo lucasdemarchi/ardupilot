@@ -17,10 +17,13 @@ class AP_Compass_HMC5843 : public AP_Compass_Backend
 {
 public:
     static AP_Compass_Backend *detect_i2c(Compass &compass,
-                                          AP_HAL::I2CDriver *i2c);
+                                          AP_HAL::I2CDriver *i2c,
+                                          bool force_external=false);
     static AP_Compass_Backend *detect_mpu6000(Compass &compass);
 
-    AP_Compass_HMC5843(Compass &compass, AP_HMC5843_SerialBus *bus);
+    AP_Compass_HMC5843(Compass &compass,
+                       AP_HMC5843_SerialBus *bus,
+                       bool force_external);
     ~AP_Compass_HMC5843();
 
     bool init();
@@ -29,7 +32,8 @@ public:
 
 private:
     static AP_Compass_Backend *_detect(Compass &compass,
-                                       AP_HMC5843_SerialBus *bus);
+                                       AP_HMC5843_SerialBus *bus,
+                                       bool force_external);
 
     bool read_raw();
     bool re_initialise();
@@ -63,6 +67,7 @@ private:
     uint8_t _product_id;
 
     bool _initialised;
+    bool _force_external;
 };
 
 class AP_HMC5843_SerialBus
