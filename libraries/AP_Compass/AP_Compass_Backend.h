@@ -74,6 +74,9 @@ protected:
     // set external state for an instance
     void set_external(uint8_t instance, bool external);
 
+    // tell if instance is an external compass
+    bool is_external(uint8_t instance);
+
     // access to frontend
     Compass &_compass;
 
