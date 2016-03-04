@@ -43,8 +43,6 @@ build_extra_clean=(["px4-v2"]="make px4-cleandep")
 # special case for SITL testing in CI
 if [ "$CI_BUILD_TARGET" = "sitltest" ]; then
     echo "Installing pymavlink"
-    git submodule init
-    git submodule update
     (cd modules/mavlink/pymavlink && python setup.py build install --user)
     unset BUILDROOT
     echo "Running SITL QuadCopter test"
