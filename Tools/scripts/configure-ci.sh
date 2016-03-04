@@ -4,7 +4,7 @@
 set -ex
 
 PKGS="build-essential gawk ccache genromfs libc6-i386 \
-      python-argparse python-empy python-serial python-pexpect python-dev python-pip zlib1g-dev gcc-4.9 g++-4.9"
+      python-argparse python-empy python-serial python-pexpect python-dev python-pip zlib1g-dev gcc-4.9 g++-4.9 clang-3.7"
 
 ARM_ROOT="gcc-arm-none-eabi-4_9-2015q3"
 ARM_TARBALL="$ARM_ROOT-20150921-linux.tar.bz2"
@@ -12,7 +12,14 @@ ARM_TARBALL="$ARM_ROOT-20150921-linux.tar.bz2"
 RPI_ROOT="master"
 RPI_TARBALL="$RPI_ROOT.tar.gz"
 
+read -r  xx UBUNTU_VERSION <<<$(lsb_release -r)
+read -r  xx UBUNTU_CODENAME <<<$(lsb_release -c)
+
 sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+
+wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add -
+sudo add-apt-repository "deb http://llvm.org/apt/${UBUNTU_CODENAME}/ llvm-toolchain-${UBUNTU_CODENAME}-3.7 main" -y
+
 sudo apt-get -qq -y update
 sudo apt-get -qq -y install $PKGS
 sudo pip install mavproxy
