@@ -49,10 +49,6 @@ extern mavlink_system_t mavlink_system;
 ///
 static inline void comm_send_ch(mavlink_channel_t chan, uint8_t ch)
 {
-    // sanity check chan
-    if (chan >= MAVLINK_COMM_NUM_BUFFERS) {
-        return;
-    }
     mavlink_comm_port[chan]->write(ch);
 }
 
