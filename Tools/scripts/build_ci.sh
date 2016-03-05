@@ -10,6 +10,13 @@ set -ex
 # CXX and CC are exported by default by travis
 unset CXX CC
 
+if [[ "$CI_BUILD_COMPILER" = "clang" ]]; then
+    #TODO: remove flags when they stop polluting the output too much
+    export CXXFLAGS="-Wno-unknown-warning-option -Wno-gnu-designator -Wno-inconsistent-missing-override -Wno-mismatched-tags -Wno-gnu-variable-sized-type-not-at-end -Wno-unknown-pragmas -Wno-c++11-narrowing"
+    export CC=clang-3.7
+    export CXX=clang++-3.7
+fi
+
 export BUILDROOT=/tmp/travis.build.$$
 rm -rf $BUILDROOT
 
@@ -59,22 +66,25 @@ for board in $($waf list_boards | head -n1); do waf_supported_boards[$board]=1; 
 
 echo "Targets: $CI_BUILD_TARGET"
 for t in $CI_BUILD_TARGET; do
-    echo "Starting make based build for target ${t}..."
-    for v in ${!build_platforms[@]}; do
-        if [[ ${build_platforms[$v]} != *$t* ]]; then
-            continue
-        fi
-        echo "Building $v for ${t}..."
+    # skip make-based build for clang
+    if [[ "$CI_BUILD_COMPILER" != "clang" ]]; then
+        echo "Starting make based build for target ${t}..."
+        for v in ${!build_platforms[@]}; do
+            if [[ ${build_platforms[$v]} != *$t* ]]; then
+                continue
+            fi
+            echo "Building $v for ${t}..."
 
-        pushd $v
-        make clean
-        if [ ${build_extra_clean[$t]+_} ]; then
-            ${build_extra_clean[$t]}
-        fi
+            pushd $v
+            make clean
+            if [ ${build_extra_clean[$t]+_} ]; then
+                ${build_extra_clean[$t]}
+            fi
 
-        make $t ${build_concurrency[$t]}
-        popd
-    done
+            make $t ${build_concurrency[$t]}
+            popd
+        done
+    fi
 
     if [[ -n ${waf_supported_boards[$t]} ]]; then
         echo "Starting waf build for board ${t}..."
