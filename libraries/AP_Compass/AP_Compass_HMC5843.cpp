@@ -139,7 +139,7 @@ AP_Compass_Backend *AP_Compass_HMC5843::probe_mpu6000(Compass &compass)
 bool AP_Compass_HMC5843::init()
 {
     hal.scheduler->suspend_timer_procs();
-    Semaphore *bus_sem = _bus->get_semaphore();
+    AP_HAL::Semaphore *bus_sem = _bus->get_semaphore();
 
     if (!bus_sem || !bus_sem->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
         hal.console->printf("HMC5843: Unable to get bus semaphore\n");
