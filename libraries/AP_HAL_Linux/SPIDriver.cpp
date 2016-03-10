@@ -61,7 +61,6 @@ SPIDeviceDriver SPIDeviceManager::_device[] = {
     SPIDeviceDriver("mpu6000",    0, 0, AP_HAL::SPIDevice_MPU6000, SPI_MODE_3, 8, RPI_GPIO_25,  1*MHZ, 8*MHZ),
     SPIDeviceDriver("ms5611",     0, 0, AP_HAL::SPIDevice_MS5611,  SPI_MODE_3, 8, RPI_GPIO_23,  1*MHZ, 8*MHZ),
     SPIDeviceDriver("l3gd20",     0, 0, AP_HAL::SPIDevice_L3GD20,  SPI_MODE_3, 8, RPI_GPIO_12,  1*MHZ, 8*MHZ),
-    SPIDeviceDriver("lsm303d",    0, 0, AP_HAL::SPIDevice_LSM303D, SPI_MODE_3, 8, RPI_GPIO_22,  1*MHZ, 8*MHZ),
     SPIDeviceDriver("dataflash",  0, 0, AP_HAL::SPIDevice_Dataflash, SPI_MODE_3, 8, RPI_GPIO_5,  1*MHZ, 8*MHZ),
     SPIDeviceDriver("raspio",     0, 0, AP_HAL::SPIDevice_RASPIO,  SPI_MODE_3, 8, RPI_GPIO_7,  8*MHZ, 8*MHZ),
 };
