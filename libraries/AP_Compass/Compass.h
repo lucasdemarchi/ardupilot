@@ -69,7 +69,7 @@ public:
 
     /// Read the compass and update the mag_ variables.
     ///
-    bool read();    
+    bool read();
 
     /// use spare CPU cycles to accumulate values from the compass if
     /// possible (this method should also be implemented in the backends)
@@ -321,7 +321,7 @@ private:
 
     //keep track of number of calibration reports sent
     uint8_t _reports_sent[COMPASS_MAX_INSTANCES];
-    
+
     //autoreboot after compass calibration
     bool _compass_cal_autoreboot;
     bool _cal_complete_requires_reboot;
@@ -341,16 +341,16 @@ private:
     enum Rotation _board_orientation;
 
     // primary instance
-    AP_Int8     _primary;                           
+    AP_Int8     _primary;
 
     // declination in radians
     AP_Float    _declination;
 
     // enable automatic declination code
-    AP_Int8     _auto_declination;                  
+    AP_Int8     _auto_declination;
 
     // first-time-around flag used by offset nulling
-    bool        _null_init_done;                           
+    bool        _null_init_done;
 
     // used by offset correction
     static const uint8_t _mag_history_size = 20;
