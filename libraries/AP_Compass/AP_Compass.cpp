@@ -1,7 +1,15 @@
 /// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 #include <AP_HAL/AP_HAL.h>
-#include "Compass.h"
 #include <AP_Vehicle/AP_Vehicle.h>
+
+#include "AP_Compass_AK8963.h"
+#include "AP_Compass_Backend.h"
+#include "AP_Compass_HIL.h"
+#include "AP_Compass_HMC5843.h"
+#include "AP_Compass_PX4.h"
+#include "AP_Compass_QURT.h"
+#include "AP_Compass_qflight.h"
+#include "AP_Compass.h"
 
 extern AP_HAL::HAL& hal;
 
