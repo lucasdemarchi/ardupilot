@@ -42,6 +42,8 @@ public:
 
     bool is_current_thread();
 
+    bool started() { return _started; }
+
 protected:
     static void *_run_trampoline(void *arg);
 
