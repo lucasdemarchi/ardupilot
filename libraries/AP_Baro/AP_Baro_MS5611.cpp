@@ -16,6 +16,7 @@
 #include "AP_Baro_MS5611.h"
 
 #include <utility>
+#include <sched.h>
 
 extern const AP_HAL::HAL &hal;
 
@@ -103,6 +104,11 @@ void AP_Baro_MS56XX::_init()
     _dev->get_semaphore()->give();
 
     hal.scheduler->resume_timer_procs();
+
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+    _thread.set_rate(100);
+    _use_timer = false;
+#endif
 
     if (_use_timer) {
         /* timer needs to be called every 10ms so set the freq_div to 10 */
@@ -223,6 +229,10 @@ void AP_Baro_MS56XX::_timer(void)
         return;
     }
 
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+    _thread_sem.take(0);
+#endif
+
     if (_state == 0) {
         // On state 0 we read temp
         uint32_t d2 = _read_adc();
@@ -279,32 +289,55 @@ void AP_Baro_MS56XX::_timer(void)
     }
 
     _last_timer = AP_HAL::micros();
+
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+    _thread_sem.give();
+#endif
+
     _dev->get_semaphore()->give();
 }
 
 void AP_Baro_MS56XX::update()
 {
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+    if (!_thread.started()) {
+        _thread.start("ms56xx", SCHED_FIFO, 15);
+        return;
+    }
+#else
     if (!_use_timer) {
         // if we're not using the timer then accumulate one more time
         // to cope with the calibration loop and minimise lag
         accumulate();
     }
+#endif
 
     if (!_updated) {
         return;
     }
+
     uint32_t sD1, sD2;
     uint8_t d1count, d2count;
 
     // Suspend timer procs because these variables are written to
     // in "_update".
+
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+    _thread_sem.take(0);
+#else
     hal.scheduler->suspend_timer_procs();
+#endif
     sD1 = _s_D1; _s_D1 = 0;
     sD2 = _s_D2; _s_D2 = 0;
     d1count = _d1_count; _d1_count = 0;
     d2count = _d2_count; _d2_count = 0;
     _updated = false;
+
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+    _thread_sem.give();
+#else
     hal.scheduler->resume_timer_procs();
+#endif
 
     if (d1count != 0) {
         _D1 = ((float)sD1) / d1count;

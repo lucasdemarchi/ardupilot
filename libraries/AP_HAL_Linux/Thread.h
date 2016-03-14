@@ -46,6 +46,8 @@ public:
 
     bool set_stack_size(size_t stack_size);
 
+    bool started() { return _started; }
+
 protected:
     static void *_run_trampoline(void *arg);
 
