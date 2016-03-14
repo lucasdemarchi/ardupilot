@@ -6,6 +6,11 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/Device.h>
 
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+#include <AP_HAL_Linux/Semaphores.h>
+#include <AP_HAL_Linux/Thread.h>
+#endif
+
 class AP_Baro_MS56XX : public AP_Baro_Backend
 {
 public:
@@ -25,6 +30,11 @@ protected:
     void _timer();
 
     AP_HAL::OwnPtr<AP_HAL::Device> _dev;
+
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
+    Linux::PeriodicThread _thread{FUNCTOR_BIND_MEMBER(&AP_Baro_MS56XX::_timer, void)};
+    Linux::Semaphore _thread_sem{};
+#endif
 
     /* Asynchronous state: */
     volatile bool            _updated;
