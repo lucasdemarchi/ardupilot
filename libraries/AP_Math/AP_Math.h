@@ -7,6 +7,9 @@
 
 #include <AP_Common/AP_Common.h>
 #include <AP_Param/AP_Param.h>
+
+#include <limits>
+#include <type_traits>
 #include <cmath>
 #include <stdint.h>
 
@@ -52,24 +55,82 @@ bool                    inverse4x4(float m[],float invOut[]);
 float* mat_mul(float *A, float *B, uint8_t n);
 
 /*
-  wrap an angle in centi-degrees
+ * @brief: Constrains an euler angle to be within the range: -180 to 180 degrees
  */
-int32_t wrap_360_cd(int32_t error);
-int32_t wrap_180_cd(int32_t error);
-float wrap_360_cd_float(float angle);
-float wrap_180_cd_float(float angle);
+template <class T>
+float wrap_180(const T &angle, float unit_mod = 1) {
+    static_assert(std::is_arithmetic<T>::value, "ERROR - wrap_180(): template parameter not of type float or int\n");
+
+    const float ang_180 = 180.f*unit_mod;
+    const float ang_360 = 360.f*unit_mod;
+    float res = fmod(static_cast<float>(angle) + ang_180, ang_360);
+    if (res < 0 || is_zero(res)) {
+        res += ang_180;
+    }
+    res -= ang_180;
+    return res;
+}
+
+/*
+ * @brief: Constrains an euler angle to be within the range: 0 to 360 degrees
+ * The second parameter changes the units. Standard: 1 == degrees, 10 == dezi,
+ * 100 == centi ..
+ */
+template <class T>
+float wrap_360(const T &angle, float unit_mod = 1) {
+    static_assert(std::is_arithmetic<T>::value, "ERROR - wrap_360(): template parameter not of type float or int\n");
+
+    const float ang_360 = 360.f*unit_mod;
+    float res = fmod(static_cast<float>(angle), ang_360);
+    if (res < 0 || is_zero(res)) {
+        res += ang_360;
+    }
+    return res;
+}
+
+/*
+ * Wrap an angle in centi-degrees
+ */
+template <class T>
+auto wrap_360_cd(const T &angle) -> decltype(wrap_360(angle, 100.f)) {
+    return wrap_360(angle, 100.f);
+}
+
+/*
+ * Wrap an angle in centi-degrees
+ */
+template <class T>
+auto wrap_180_cd(const T &angle) -> decltype(wrap_180(angle, 100.f)) {
+    return wrap_180(angle, 100.f);
+}
 
 /*
   wrap an angle defined in radians to -PI ~ PI (equivalent to +- 180 degrees)
  */
-float wrap_PI(float angle_in_radians);
+template <class T>
+float wrap_PI(const T &radian) {
+    static_assert(std::is_arithmetic<T>::value, "ERROR - wrap_PI(): template parameter not of type float or int\n");
+    float res = fmod(radian + static_cast<float>(M_PI), static_cast<float>(M_2PI));
+    if (res < 0 || is_zero(res)) {
+        res += (float)M_PI;
+    }
+    res -= (float)M_PI;
+    return res;
+}
 
 /*
-  wrap an angle defined in radians to the interval [0,2*PI)
+ * wrap an angle in radians to 0..2PI
  */
-float wrap_2PI(float angle);
+template <class T>
+float wrap_2PI(const T &radian) {
+    static_assert(std::is_arithmetic<T>::value, "ERROR - wrap_2PI(): template parameter not of type float or int\n");
+    float res = fmod(radian, static_cast<float>(M_2PI));
+    if (res < 0.f) {
+        res += (float)M_2PI;
+    }
+    return res;
+}
 
-// constrain a value
 // constrain a value
 static inline float constrain_float(float amt, float low, float high)
 {
