@@ -20,7 +20,6 @@
 #include "Buzzer.h"
 #include "Display_SSD1306_I2C.h"
 #include "ExternalLED.h"
-#include "NavioLED_I2C.h"
 #include "OreoLED_PX4.h"
 #include "RCOutputRGBLed.h"
 #include "ToneAlarm_Linux.h"
@@ -91,7 +90,8 @@ struct AP_Notify::notify_events_type AP_Notify::events;
     NotifyDevice *AP_Notify::_devices[] = {&boardled, &toshibaled, &externalled, &buzzer};
 #elif CONFIG_HAL_BOARD == HAL_BOARD_LINUX
     #if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO
-        NavioLED_I2C navioled;
+        RCOutputRGBLed navioled(HAL_RCOUT_RGBLED_RED, HAL_RCOUT_RGBLED_GREEN, HAL_RCOUT_RGBLED_BLUE,
+                                0xFF, 0x00, 0x7F, 0x4F);
         ToshibaLED_I2C toshibaled;
         NotifyDevice *AP_Notify::_devices[] = {&navioled, &toshibaled};
     #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO2
