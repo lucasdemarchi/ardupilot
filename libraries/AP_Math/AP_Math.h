@@ -58,18 +58,7 @@ float* mat_mul(float *A, float *B, uint8_t n);
  * @brief: Constrains an euler angle to be within the range: -180 to 180 degrees
  */
 template <class T>
-float wrap_180(const T &angle, float unit_mod = 1) {
-    static_assert(std::is_arithmetic<T>::value, "ERROR - wrap_180(): template parameter not of type float or int\n");
-
-    const float ang_180 = 180.f*unit_mod;
-    const float ang_360 = 360.f*unit_mod;
-    float res = fmod(static_cast<float>(angle) + ang_180, ang_360);
-    if (res < 0 || is_zero(res)) {
-        res += ang_180;
-    }
-    res -= ang_180;
-    return res;
-}
+float wrap_180(const T &angle, float unit_mod = 1);
 
 /*
  * @brief: Constrains an euler angle to be within the range: 0 to 360 degrees
@@ -77,16 +66,7 @@ float wrap_180(const T &angle, float unit_mod = 1) {
  * 100 == centi ..
  */
 template <class T>
-float wrap_360(const T &angle, float unit_mod = 1) {
-    static_assert(std::is_arithmetic<T>::value, "ERROR - wrap_360(): template parameter not of type float or int\n");
-
-    const float ang_360 = 360.f*unit_mod;
-    float res = fmod(static_cast<float>(angle), ang_360);
-    if (res < 0 || is_zero(res)) {
-        res += ang_360;
-    }
-    return res;
-}
+float wrap_360(const T &angle, float unit_mod = 1);
 
 /*
  * Wrap an angle in centi-degrees
@@ -108,28 +88,13 @@ auto wrap_180_cd(const T &angle) -> decltype(wrap_180(angle, 100.f)) {
   wrap an angle defined in radians to -PI ~ PI (equivalent to +- 180 degrees)
  */
 template <class T>
-float wrap_PI(const T &radian) {
-    static_assert(std::is_arithmetic<T>::value, "ERROR - wrap_PI(): template parameter not of type float or int\n");
-    float res = fmod(radian + static_cast<float>(M_PI), static_cast<float>(M_2PI));
-    if (res < 0 || is_zero(res)) {
-        res += (float)M_PI;
-    }
-    res -= (float)M_PI;
-    return res;
-}
+float wrap_PI(const T &radian);
 
 /*
  * wrap an angle in radians to 0..2PI
  */
 template <class T>
-float wrap_2PI(const T &radian) {
-    static_assert(std::is_arithmetic<T>::value, "ERROR - wrap_2PI(): template parameter not of type float or int\n");
-    float res = fmod(radian, static_cast<float>(M_2PI));
-    if (res < 0.f) {
-        res += (float)M_2PI;
-    }
-    return res;
-}
+float wrap_2PI(const T &radian);
 
 // constrain a value
 static inline float constrain_float(float amt, float low, float high)
