@@ -113,6 +113,30 @@ void AP_Mission::resume()
     }
 }
 
+/// check mission starts with a takeoff command
+bool AP_Mission::starts_with_takeoff_cmd()
+{
+    Mission_Command cmd = {};
+    uint16_t cmd_index;
+
+    // get starting point for search or Reset cmd_index, if _restart is set
+    cmd_index = _restart ? AP_MISSION_CMD_INDEX_NONE : _nav_cmd.index;
+
+    if (cmd_index == AP_MISSION_CMD_INDEX_NONE) {
+        // start from beginning of the mission command list
+        cmd_index = AP_MISSION_FIRST_REAL_COMMAND;
+        get_next_cmd(cmd_index, cmd, true);
+
+    } else {
+        read_cmd_from_storage(cmd_index, cmd);
+    }
+
+    if (cmd.id != MAV_CMD_NAV_TAKEOFF) {
+        return false;
+    }
+    return true;
+}
+
 /// start_or_resume - if MIS_AUTORESTART=0 this will call resume(), otherwise it will call start()
 void AP_Mission::start_or_resume()
 {
@@ -133,6 +157,7 @@ void AP_Mission::reset()
     _do_cmd.index          = AP_MISSION_CMD_INDEX_NONE;
     _prev_nav_cmd_index    = AP_MISSION_CMD_INDEX_NONE;
     _prev_nav_cmd_wp_index = AP_MISSION_CMD_INDEX_NONE;
+    _prev_nav_cmd_id       = AP_MISSION_CMD_ID_NONE;
     init_jump_tracking();
 }
 
@@ -312,6 +337,7 @@ bool AP_Mission::set_current_cmd(uint16_t index)
 
     // if index is zero then the user wants to completely restart the mission
     if (index == 0 || _flags.state == MISSION_COMPLETE) {
+        _prev_nav_cmd_id    = AP_MISSION_CMD_ID_NONE;
         _prev_nav_cmd_index = AP_MISSION_CMD_INDEX_NONE;
         _prev_nav_cmd_wp_index = AP_MISSION_CMD_INDEX_NONE;
         // reset the jump tracking to zero
@@ -373,6 +399,7 @@ bool AP_Mission::set_current_cmd(uint16_t index)
         // check if navigation or "do" command
         if (is_nav_cmd(cmd)) {
             // save previous nav command index
+            _prev_nav_cmd_id = _nav_cmd.id;
             _prev_nav_cmd_index = _nav_cmd.index;
             // save separate previous nav command index if it contains lat,long,alt
             if (!(cmd.content.location.lat == 0 && cmd.content.location.lng == 0)) {
@@ -533,6 +560,7 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         uint16_t radius_m = fabsf(packet.param3);        // param 3 is radius in meters is held in high p1
         cmd.p1 = (radius_m<<8) | (num_turns & 0x00FF);   // store radius in high byte of p1, num turns in low byte of p1
         cmd.content.location.flags.loiter_ccw = (packet.param3 < 0);
+        cmd.content.location.flags.loiter_xtrack = (packet.param4 > 0); // 0 to xtrack from center of waypoint, 1 to xtrack from tangent exit location
     }
         break;
 
@@ -540,6 +568,7 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         copy_location = true;
         cmd.p1 = packet.param1;                         // loiter time in seconds uses all 16 bits, 8bit seconds is too small. No room for radius.
         cmd.content.location.flags.loiter_ccw = (packet.param3 < 0);
+        cmd.content.location.flags.loiter_xtrack = (packet.param4 > 0); // 0 to xtrack from center of waypoint, 1 to xtrack from tangent exit location
         break;
 
     case MAV_CMD_NAV_RETURN_TO_LAUNCH:                  // MAV ID: 20
@@ -568,6 +597,7 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         copy_location = true;
         cmd.p1 = fabsf(packet.param2);                  // param2 is radius in meters
         cmd.content.location.flags.loiter_ccw = (packet.param2 < 0);
+        cmd.content.location.flags.loiter_xtrack = (packet.param4 > 0); // 0 to xtrack from center of waypoint, 1 to xtrack from tangent exit location
         break;
 
     case MAV_CMD_NAV_SPLINE_WAYPOINT:                   // MAV ID: 82
@@ -577,6 +607,13 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
 
     case MAV_CMD_NAV_GUIDED_ENABLE:                     // MAV ID: 92
         cmd.p1 = packet.param1;                         // on/off. >0.5 means "on", hand-over control to external controller
+        break;
+
+    case MAV_CMD_NAV_DELAY:                            // MAV ID: 94
+        cmd.content.nav_delay.seconds = packet.param1; // delay in seconds
+        cmd.content.nav_delay.hour_utc = packet.param2;// absolute time's hour (utc)
+        cmd.content.nav_delay.min_utc = packet.param3;// absolute time's min (utc)
+        cmd.content.nav_delay.sec_utc = packet.param4; // absolute time's second (utc)
         break;
 
     case MAV_CMD_CONDITION_DELAY:                       // MAV ID: 112
@@ -783,7 +820,7 @@ MAV_MISSION_RESULT AP_Mission::mavlink_int_to_mission_cmd(const mavlink_mission_
         }
     }
 
-    // if we got this far then it must have been succesful
+    // if we got this far then it must have been successful
     return MAV_MISSION_ACCEPTED;
 }
 
@@ -947,6 +984,7 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
         if (cmd.content.location.flags.loiter_ccw) {
             packet.param3 = -packet.param3;
         }
+        packet.param4 = cmd.content.location.flags.loiter_xtrack; // 0 to xtrack from center of waypoint, 1 to xtrack from tangent exit location
         break;
 
     case MAV_CMD_NAV_LOITER_TIME:                       // MAV ID: 19
@@ -957,6 +995,7 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
         } else {
             packet.param3 = 1;
         }
+        packet.param4 = cmd.content.location.flags.loiter_xtrack; // 0 to xtrack from center of waypoint, 1 to xtrack from tangent exit location
         break;
 
     case MAV_CMD_NAV_RETURN_TO_LAUNCH:                  // MAV ID: 20
@@ -987,6 +1026,7 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
         if (cmd.content.location.flags.loiter_ccw) {
             packet.param2 = -packet.param2;
         }
+        packet.param4 = cmd.content.location.flags.loiter_xtrack; // 0 to xtrack from center of waypoint, 1 to xtrack from tangent exit location
         break;
 
     case MAV_CMD_NAV_SPLINE_WAYPOINT:                   // MAV ID: 82
@@ -996,6 +1036,13 @@ bool AP_Mission::mission_cmd_to_mavlink_int(const AP_Mission::Mission_Command& c
 
     case MAV_CMD_NAV_GUIDED_ENABLE:                     // MAV ID: 92
         packet.param1 = cmd.p1;                         // on/off. >0.5 means "on", hand-over control to external controller
+        break;
+
+    case MAV_CMD_NAV_DELAY:                            // MAV ID: 94
+        packet.param1 = cmd.content.nav_delay.seconds; // delay in seconds
+        packet.param2 = cmd.content.nav_delay.hour_utc; // absolute time's day of week (utc)
+        packet.param3 = cmd.content.nav_delay.min_utc; // absolute time's hour (utc)
+        packet.param4 = cmd.content.nav_delay.sec_utc; // absolute time's min (utc)
         break;
 
     case MAV_CMD_CONDITION_DELAY:                       // MAV ID: 112
@@ -1245,6 +1292,7 @@ bool AP_Mission::advance_current_nav_cmd()
         // check if navigation or "do" command
         if (is_nav_cmd(cmd)) {
             // save previous nav command index
+            _prev_nav_cmd_id = _nav_cmd.id;
             _prev_nav_cmd_index = _nav_cmd.index;
             // save separate previous nav command index if it contains lat,long,alt
             if (!(cmd.content.location.lat == 0 && cmd.content.location.lng == 0)) {
@@ -1437,7 +1485,7 @@ void AP_Mission::init_jump_tracking()
 /// get_jump_times_run - returns number of times the jump command has been run
 int16_t AP_Mission::get_jump_times_run(const Mission_Command& cmd)
 {
-    // exit immediatley if cmd is not a do-jump command or target is invalid
+    // exit immediately if cmd is not a do-jump command or target is invalid
     if ((cmd.id != MAV_CMD_DO_JUMP) || (cmd.content.jump.target >= (unsigned)_cmd_total) || (cmd.content.jump.target == 0)) {
         // To-Do: log an error?
         return AP_MISSION_JUMP_TIMES_MAX;

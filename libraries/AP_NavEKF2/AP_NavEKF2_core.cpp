@@ -243,7 +243,9 @@ void NavEKF2_core::InitialiseVariables()
     posResetNE.zero();
     velResetNE.zero();
     hgtInnovFiltState = 0.0f;
-    magSelectIndex = _ahrs->get_compass()->get_primary();
+    if (_ahrs->get_compass()) {
+        magSelectIndex = _ahrs->get_compass()->get_primary();
+    }
     imuDataDownSampledNew.delAng.zero();
     imuDataDownSampledNew.delVel.zero();
     imuDataDownSampledNew.delAngDT = 0.0f;
@@ -508,7 +510,7 @@ void NavEKF2_core::UpdateStrapdownEquationsNED()
     accNavMag = velDotNEDfilt.length();
     accNavMagHoriz = norm(velDotNEDfilt.x , velDotNEDfilt.y);
 
-    // save velocity for use in trapezoidal intergration for position calcuation
+    // save velocity for use in trapezoidal integration for position calcuation
     Vector3f lastVelocity = stateStruct.velocity;
 
     // sum delta velocities to get velocity
@@ -563,7 +565,7 @@ void  NavEKF2_core::calcOutputStatesFast() {
     Vector3f delVelNav  = Tbn_temp*imuDataNew.delVel + delVelCorrection;
     delVelNav.z += GRAVITY_MSS*imuDataNew.delVelDT;
 
-    // save velocity for use in trapezoidal intergration for position calcuation
+    // save velocity for use in trapezoidal integration for position calcuation
     Vector3f lastVelocity = outputDataNew.velocity;
 
     // sum delta velocities to get velocity
@@ -619,7 +621,7 @@ void  NavEKF2_core::calcOutputStatesFast() {
 
 /*
  * Calculate the predicted state covariance matrix using algebraic equations generated with Matlab symbolic toolbox.
- * The script file used to generate these and otehr equations in this filter can be found here:
+ * The script file used to generate these and other equations in this filter can be found here:
  * https://github.com/priseborough/InertialNav/blob/master/derivations/RotationVectorAttitudeParameterisation/GenerateNavFilterEquations.m
 */
 void NavEKF2_core::CovariancePrediction()

@@ -272,12 +272,6 @@ void Plane::Log_Write_Control_Tuning()
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
 
-// Write a TECS tuning packet
-void Plane::Log_Write_TECS_Tuning(void)
-{
-    SpdHgt_Controller->log_data(DataFlash, LOG_TECS_MSG);
-}
-
 struct PACKED log_Nav_Tuning {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -285,11 +279,9 @@ struct PACKED log_Nav_Tuning {
     int16_t target_bearing_cd;
     int16_t nav_bearing_cd;
     int16_t altitude_error_cm;
-    int16_t airspeed_cm;
-    float   altitude;
-    uint32_t groundspeed_cm;
     float   xtrack_error;
     float   xtrack_error_i;
+    float   airspeed_error;
 };
 
 // Write a navigation tuning packet
@@ -302,11 +294,9 @@ void Plane::Log_Write_Nav_Tuning()
         target_bearing_cd   : (int16_t)nav_controller->target_bearing_cd(),
         nav_bearing_cd      : (int16_t)nav_controller->nav_bearing_cd(),
         altitude_error_cm   : (int16_t)altitude_error_cm,
-        airspeed_cm         : (int16_t)airspeed.get_airspeed_cm(),
-        altitude            : barometer.get_altitude(),
-        groundspeed_cm      : (uint32_t)(gps.ground_speed()*100),
         xtrack_error        : nav_controller->crosstrack_error(),
-        xtrack_error_i      : nav_controller->crosstrack_error_integrator()
+        xtrack_error_i      : nav_controller->crosstrack_error_integrator(),
+        airspeed_error      : airspeed_error
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
 }
@@ -345,11 +335,8 @@ void Plane::Log_Write_Status()
 struct PACKED log_Sonar {
     LOG_PACKET_HEADER;
     uint64_t time_us;
-    uint16_t distance;
+    float distance;
     float voltage;
-    float baro_alt;
-    float groundspeed;
-    int8_t throttle;
     uint8_t count;
     float correction;
 };
@@ -366,11 +353,8 @@ void Plane::Log_Write_Sonar()
     struct log_Sonar pkt = {
         LOG_PACKET_HEADER_INIT(LOG_SONAR_MSG),
         time_us     : AP_HAL::micros64(),
-        distance    : distance,
+        distance    : (float)distance*0.01f,
         voltage     : rangefinder.voltage_mv()*0.001f,
-        baro_alt    : barometer.get_altitude(),
-        groundspeed : gps.ground_speed(),
-        throttle    : (int8_t)(100 * channel_throttle->norm_output()),
         count       : rangefinder_state.in_range_count,
         correction  : rangefinder_state.correction
     };
@@ -498,9 +482,9 @@ const struct LogStructure Plane::log_structure[] = {
     { LOG_CTUN_MSG, sizeof(log_Control_Tuning),     
       "CTUN", "Qcccchhh",    "TimeUS,NavRoll,Roll,NavPitch,Pitch,ThrOut,RdrOut,ThrDem" },
     { LOG_NTUN_MSG, sizeof(log_Nav_Tuning),         
-      "NTUN", "QfccccfIff",  "TimeUS,WpDist,TargBrg,NavBrg,AltErr,Arspd,Alt,GSpdCM,XT,XTi" },
+      "NTUN", "Qfcccfff",  "TimeUS,WpDist,TargBrg,NavBrg,AltErr,XT,XTi,ArspdErr" },
     { LOG_SONAR_MSG, sizeof(log_Sonar),             
-      "SONR", "QHfffbBf",   "TimeUS,DistCM,Volt,BaroAlt,GSpd,Thr,Cnt,Corr" },
+      "SONR", "QffBf",   "TimeUS,Dist,Volt,Cnt,Corr" },
     { LOG_ARM_DISARM_MSG, sizeof(log_Arm_Disarm),
       "ARM", "QBH", "TimeUS,ArmState,ArmChecks" },
     { LOG_ATRP_MSG, sizeof(AP_AutoTune::log_ATRP),
@@ -513,7 +497,6 @@ const struct LogStructure Plane::log_structure[] = {
     { LOG_OPTFLOW_MSG, sizeof(log_Optflow),
       "OF",   "QBffff",   "TimeUS,Qual,flowX,flowY,bodyX,bodyY" },
 #endif
-    TECS_LOG_FORMAT(LOG_TECS_MSG)
 };
 
 #if CLI_ENABLED == ENABLED
@@ -586,7 +569,6 @@ void Plane::Log_Write_Attitude(void) {}
 void Plane::Log_Write_Performance() {}
 void Plane::Log_Write_Startup(uint8_t type) {}
 void Plane::Log_Write_Control_Tuning() {}
-void Plane::Log_Write_TECS_Tuning(void) {}
 void Plane::Log_Write_Nav_Tuning() {}
 void Plane::Log_Write_Status() {}
 void Plane::Log_Write_Sonar() {}

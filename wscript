@@ -26,7 +26,8 @@ from waflib import Build, ConfigSet, Context, Utils
 def init(ctx):
     env = ConfigSet.ConfigSet()
     try:
-        env.load('build/c4che/_cache.py')
+        p = os.path.join(Context.out_dir, Build.CACHE_DIR, Build.CACHE_SUFFIX)
+        env.load(p)
     except:
         return
 
@@ -86,6 +87,9 @@ def configure(cfg):
 
     cfg.env.BOARD = cfg.options.board
     cfg.env.DEBUG = cfg.options.debug
+
+    # Allow to differentiate our build from the make build
+    cfg.define('WAF_BUILD', 1)
 
     cfg.msg('Setting board to', cfg.options.board)
     boards.get_board(cfg.env.BOARD).configure(cfg)

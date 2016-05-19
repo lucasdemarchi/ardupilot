@@ -499,7 +499,7 @@ void NavEKF2::check_log_write(void)
     }
 
     // this is an example of an ad-hoc log in EKF
-    // DataFlash_Class::instance()->Log_Write("NKA", "TimeUS,X", "Qf", AP_HAL::micros64(), 2.4f);
+    // DataFlash_Class::instance()->Log_Write("NKA", "TimeUS,X", "Qf", AP_HAL::micros64(), (double)2.4f);
 }
 
 
@@ -585,7 +585,7 @@ void NavEKF2::UpdateFilter(void)
 
     for (uint8_t i=0; i<num_cores; i++) {
         // if the previous core has only recently finished a new state prediction cycle, then
-        // dont start a new cycle to allow time for fusion operations to complete if the update
+        // don't start a new cycle to allow time for fusion operations to complete if the update
         // rate is higher than 200Hz
         bool statePredictEnabled;
         if ((i > 0) && (core[i-1].getFramesSincePredict() < 2) && (ins.get_sample_rate() > 200)) {

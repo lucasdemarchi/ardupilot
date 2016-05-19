@@ -56,7 +56,7 @@ const AP_Param::Info Plane::var_info[] = {
 
     // @Param: AUTOTUNE_LEVEL
     // @DisplayName: Autotune level
-    // @Description: Level of aggressiveness for autotune. When autotune is run a lower AUTOTUNE_LEVEL will result in a 'softer' tune, with less agressive gains. For most users a level of 6 is recommended.
+    // @Description: Level of aggressiveness for autotune. When autotune is run a lower AUTOTUNE_LEVEL will result in a 'softer' tune, with less aggressive gains. For most users a level of 6 is recommended.
     // @Range: 1 10
     // @Increment: 1
     // @User: Standard
@@ -239,6 +239,24 @@ const AP_Param::Info Plane::var_info[] = {
     // @Increment: 1
     // @User: User
     GSCALAR(level_roll_limit,              "LEVEL_ROLL_LIMIT",   5),
+
+    // @Param: LAND_SLOPE_RCALC
+    // @DisplayName: Landing slope re-calc threshold
+    // @Description: This parameter is used when using a rangefinder during landing for altitude correction from baro drift (RNGFND_LANDING=1) and the altitude correction indicates your altitude is lower than the intended slope path. This value is the threshold of the correction to re-calculate the landing approach slope. Set to zero to keep the original slope all the way down and any detected baro drift will be corrected by pitching/throttling up to snap back to resume the original slope path. Otherwise, when a rangefinder altitude correction exceeds this threshold it will trigger a slope re-calculate to give a shallower slope. This also smoothes out the approach when flying over objects such as trees. Recommend a value of 2m.
+    // @Range: 0 5
+    // @Units: meters
+    // @Increment: 0.5
+    // @User: Advanced
+    GSCALAR(land_slope_recalc_shallow_threshold,          "LAND_SLOPE_RCALC",  2.0f),
+
+    // @Param: LAND_ABORT_DEG
+    // @DisplayName: Landing auto-abort slope threshold
+    // @Description: This parameter is used when using a rangefinder during landing for altitude correction from baro drift (RNGFND_LANDING=1) and the altitude correction indicates your actual altitude is higher than the intended slope path. Normally it would pitch down steeply but that can result in a crash with high airspeed so this allows remembering the baro offset and self-abort the landing and come around for another landing with the correct baro offset applied for a perfect slope. An auto-abort go-around will only happen once, next attempt will not auto-abort again. This operation happens entirely automatically in AUTO mode. This value is the delta degrees threshold to trigger the go-around compared to the origional slope. Example: if set to 5 deg and the mission planned slope is 15 deg then if the new slope is 21 then it will go-around. Set to 0 to disable. Requires LAND_SLOPE_RCALC > 0.
+    // @Range: 0 90
+    // @Units: degrees
+    // @Increment: 0.1
+    // @User: Advanced
+    GSCALAR(land_slope_recalc_steep_threshold_to_abort,          "LAND_ABORT_DEG", 0),
 
     // @Param: LAND_PITCH_CD
     // @DisplayName: Landing Pitch
@@ -1045,7 +1063,7 @@ const AP_Param::Info Plane::var_info[] = {
 
     // @Param: CRASH_DETECT
     // @DisplayName: Crash Detection
-    // @Description: Automatically detect a crash during AUTO flight and perform the bitmask selected action(s). Disarm will turn off motor for saftey and to help against burning out ESC and motor. Setting the mode to manual will help save the servos from burning out by overexerting if the aircraft crashed in an odd orientation such as upsidedown.
+    // @Description: Automatically detect a crash during AUTO flight and perform the bitmask selected action(s). Disarm will turn off motor for safety and to help against burning out ESC and motor. Setting the mode to manual will help save the servos from burning out by overexerting if the aircraft crashed in an odd orientation such as upsidedown.
     // @Values: 0:Disabled,1:Disarm
     // @Bitmask: 0:Disarm
     // @User: Advanced
