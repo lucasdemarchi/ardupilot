@@ -15,6 +15,8 @@
  */
 
 #include <AP_Param/AP_Param.h>
+#include <GCS_MAVLink/GCS.h>
+
 #include "Parameters.h"
 #include "VehicleType.h"
 #include "MsgHandler.h"
@@ -36,8 +38,7 @@
 
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
-#include <GCS_MAVLink/GCS.h>
-GCS _gcs;
+static GCS *_gcs = GCS::instance();
 
 ReplayVehicle replayvehicle;
 

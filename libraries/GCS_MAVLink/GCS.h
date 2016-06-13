@@ -368,26 +368,16 @@ private:
 
 /// @class GCS
 /// @brief global GCS object
-class GCS
-{
-
+class GCS {
 public:
-
-    GCS() {
-        if (_singleton  == nullptr) {
-            _singleton = this;
-        } else {
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-            // this is a serious problem, but we don't need to kill a
-            // real vehicle
-            AP_HAL::panic("GCS must be singleton");
-#endif
-        }
-    };
-
-    static class GCS *instance() {
-        return _singleton;
+    static GCS *instance()
+    {
+        static GCS _instance;
+        return &_instance;
     }
+
+    /* non-copyable */
+    GCS(const GCS &other) = delete;
 
     void send_statustext(MAV_SEVERITY severity, uint8_t dest_bitmask, const char *text);
     void service_statustext(void);
@@ -395,7 +385,8 @@ public:
     /*
       set a dataflash pointer for logging
      */
-    void set_dataflash(DataFlash_Class *dataflash) {
+    void set_dataflash(DataFlash_Class *dataflash)
+    {
         dataflash_p = dataflash;
     }
 
@@ -403,8 +394,7 @@ public:
     DataFlash_Class *dataflash_p;
 
 private:
-
-    static GCS *_singleton;
+    GCS() { }
 
     struct statustext_t {
         uint8_t                 bitmask;
@@ -418,5 +408,4 @@ private:
 #endif
 
     ObjectArray<statustext_t> _statustext_queue{_status_capacity};
-
 };

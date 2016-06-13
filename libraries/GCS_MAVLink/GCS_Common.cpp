@@ -30,8 +30,6 @@ uint32_t GCS_MAVLINK::last_radio_status_remrssi_ms;
 uint8_t GCS_MAVLINK::mavlink_active = 0;
 uint32_t GCS_MAVLINK::reserve_param_space_start_ms;
 
-GCS *GCS::_singleton = nullptr;
-
 GCS_MAVLINK::GCS_MAVLINK()
 {
     AP_Param::setup_object_defaults(this, var_info);
