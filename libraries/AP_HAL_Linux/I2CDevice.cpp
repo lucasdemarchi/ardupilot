@@ -161,6 +161,24 @@ bool I2CDevice::transfer(const uint8_t *send, uint32_t send_len,
     return r >= 0;
 }
 
+bool I2CDevice::smbus_quick(bool is_read)
+{
+    struct i2c_smbus_ioctl_data args = { };
+
+    args.read_write = is_read ? I2C_SMBUS_READ : I2C_SMBUS_WRITE;
+    args.size = I2C_SMBUS_QUICK;
+    args.command = 0;
+    args.data = nullptr;
+
+    int r = -EINVAL;
+    unsigned retries = _retries;
+    do {
+        r = ::ioctl(_bus.fd, I2C_SMBUS, &args);
+    } while (r < 0 && retries-- > 0);
+
+    return r >= 0;
+}
+
 bool I2CDevice::read_registers_multiple(uint8_t first_reg, uint8_t *recv,
                                         uint32_t recv_len, uint8_t times)
 {
