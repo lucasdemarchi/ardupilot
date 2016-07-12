@@ -51,6 +51,11 @@ public:
         return true;
     }
 
+    bool smbus_quick(bool is_read) override
+    {
+        return true;
+    }
+
     bool read_registers_multiple(uint8_t first_reg, uint8_t *recv,
                                  uint32_t recv_len, uint8_t times)
     {
