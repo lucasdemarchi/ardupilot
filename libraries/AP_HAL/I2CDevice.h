@@ -45,9 +45,23 @@ public:
     /* See Device::set_speed() */
     virtual bool set_speed(Device::Speed speed) override = 0;
 
-    /* See Device::transfer() */
+    /* See Device::transfer()
+     *
+     * The slave address is sent followed by @send and then @recv data, as
+     * a half-duplex transaction.
+     *
+     * It's not allowed to call this method without data to transfer. See
+     * @smbus_quick if only the slave address must be transferred.
+     */
     virtual bool transfer(const uint8_t *send, uint32_t send_len,
                           uint8_t *recv, uint32_t recv_len) override = 0;
+
+    /*
+     * Transfer only the slave address, without any data to read or write. If
+     * @read is true, a read transfer is executed, otherwise it is a write
+     * operation.
+     */
+    virtual bool smbus_quick(bool read) = 0;
 
     /*
      * Read location from device multiple times, advancing the buffer each
