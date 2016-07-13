@@ -160,12 +160,7 @@ def check_librt(cfg, env):
 def check_package(cfg, env, libname):
     '''use pkg-config to look for an installed library that has a LIBNAME.pc file'''
     cfg.check_cfg(package=libname, mandatory=False, global_define=True,
-                  args=['--libs', '--cflags'])
-    capsname = libname.upper()
-    env.LIB += cfg.env['LIB_%s' % capsname]
-    env.INCLUDES += cfg.env['INCLUDES_%s' % capsname]
-    env.CFLAGS += cfg.env['CFLAGS_%s' % capsname]
-    env.LIBPATH += cfg.env['LIBPATH_%s' % capsname]
+                  args=['--libs', '--cflags'], uselib_store=libname.upper())
 
 @conf
 def check_lttng(cfg, env):

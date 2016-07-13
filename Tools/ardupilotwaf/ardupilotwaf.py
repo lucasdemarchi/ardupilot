@@ -133,6 +133,7 @@ def ap_program(bld,
         name=name,
         program_name=program_name,
         program_dir=program_dir,
+        uselib='LIBIIO LIBDL LTTNG-UST',
         **kw
     )
 
