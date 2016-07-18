@@ -17,47 +17,31 @@
  */
 #pragma once
 
-#include <sys/epoll.h>
-#include <unistd.h>
+#include <inttypes.h>
 
-#include "AP_HAL/utility/RingBuffer.h"
-#include "Semaphores.h"
+#include <AP_HAL/Device.h>
+
+#include "Poller.h"
 
 namespace Linux {
 
-class Poller;
-
-class Pollable {
-    friend class Poller;
+class BusPollable : public Pollable {
 public:
-    Pollable(int fd) : _fd(fd) { }
-    Pollable() : _fd(-1) { }
+    using PeriodicCb = AP_HAL::Device::PeriodicCb;
 
-    virtual ~Pollable();
+    BusPollable(PeriodicCb cb_) : cb(cb_) { }
 
-    int get_fd() const { return _fd; }
+    void on_can_read() override;
 
-    virtual void on_can_read() { }
-    virtual void on_can_write() { }
-    virtual void on_error() { }
-    virtual void on_hang_up() { }
+    PeriodicCb cb;
+    bool removeme;
+
+    bool setup_timer(uint32_t timeout_usec);
+    bool adjust_timer(uint32_t timeout_usec);
+    uint32_t get_events();
 
 protected:
-    int _fd;
-};
-
-class Poller {
-public:
-    Poller() : _epfd(epoll_create1(EPOLL_CLOEXEC)) { }
-    ~Poller() { close(_epfd); }
-
-    bool register_pollable(Pollable*, uint32_t events);
-    void unregister_pollable(const Pollable*);
-
-    int poll() const;
-
-private:
-    int _epfd;
+    bool _adjust_timer(int fd, uint32_t timeout_usec);
 };
 
 }

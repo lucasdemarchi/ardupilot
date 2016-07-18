@@ -46,6 +46,10 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Math/AP_Math.h>
 
+#include "BusPollable.h"
+#include "Poller.h"
+#include "Scheduler.h"
+#include "Thread.h"
 #include "Util.h"
 
 /* Workaround broken header from i2c-tools */
@@ -77,6 +81,12 @@ class I2CBus {
 public:
     ~I2CBus();
     int open(uint8_t n);
+    void run();
+    void cleanup_pollables();
+
+    Thread thread{FUNCTOR_BIND_MEMBER(&I2CBus::run, void)};
+    Poller poller{};
+    std::vector<BusPollable*> pollable;
 
     Semaphore sem;
     int fd = -1;
@@ -113,6 +123,25 @@ int I2CBus::open(uint8_t n)
     bus = n;
 
     return fd;
+}
+
+void I2CBus::cleanup_pollables()
+{
+    for (auto it = pollable.begin(); it != pollable.end(); it++) {
+        BusPollable *p = *it;
+        if (p->removeme) {
+            pollable.erase(it);
+            delete p;
+        }
+    }
+}
+
+void I2CBus::run()
+{
+    while (true) {
+        poller.poll();
+        cleanup_pollables();
+    }
 }
 
 I2CDevice::~I2CDevice()
@@ -220,15 +249,37 @@ int I2CDevice::get_fd()
 }
 
 AP_HAL::Device::PeriodicHandle I2CDevice::register_periodic_callback(
-    uint32_t period_usec, AP_HAL::Device::PeriodicCb)
+    uint32_t period_usec, AP_HAL::Device::PeriodicCb cb)
 {
-    return nullptr;
+    BusPollable *p = new BusPollable(cb);
+    if (!p ||
+        !p->setup_timer(period_usec) ||
+        !_bus.poller.register_pollable(p, p->get_events())) {
+        AP_HAL::panic("Could not create periodic callback");
+    }
+    _bus.poller.register_pollable(p, p->get_events());
+
+    if (!_bus.thread.is_started()) {
+        char name[14];
+        snprintf(name, sizeof(name), "i2c-%u", _bus.bus);
+
+        _bus.thread.set_stack_size(AP_LINUX_SENSORS_STACK_SIZE);
+        _bus.thread.start(name, AP_LINUX_SENSORS_SCHED_POLICY,
+                          AP_LINUX_SENSORS_SCHED_PRIO);
+    }
+
+    return static_cast<AP_HAL::Device::PeriodicHandle>(p);
 }
 
 bool I2CDevice::adjust_periodic_callback(
     AP_HAL::Device::PeriodicHandle h, uint32_t period_usec)
 {
-    return false;
+    auto it = std::find(_bus.pollable.begin(), _bus.pollable.end(), h);
+    if (it == _bus.pollable.end()) {
+        return false;
+    }
+
+    return (*it)->adjust_timer(period_usec);
 }
 
 I2CDeviceManager::I2CDeviceManager()
