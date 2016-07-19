@@ -52,7 +52,9 @@ public:
         k_param_software_type,
         k_param_ins_old,                        // *** Deprecated, remove with next eeprom number change
         k_param_ins,                            // libraries/AP_InertialSensor variables
+        k_param_NavEKF2_old, // deprecated
         k_param_NavEKF2,
+        k_param_g2, // 2nd block of parameters
 
         // simulation
         k_param_sitl = 10,
@@ -98,7 +100,7 @@ public:
         k_param_acro_trainer,
         k_param_pilot_velocity_z_max,
         k_param_circle_rate,                // deprecated - remove
-        k_param_sonar_gain,
+        k_param_rangefinder_gain,
         k_param_ch8_option,
         k_param_arming_check,
         k_param_sprayer,
@@ -121,7 +123,7 @@ public:
         k_param_serial1_baud,           // deprecated - remove
         k_param_serial2_baud,           // deprecated - remove
         k_param_land_repositioning,
-        k_param_sonar, // sonar object
+        k_param_rangefinder, // rangefinder object
         k_param_fs_ekf_thresh,
         k_param_terrain,
         k_param_acro_expo,
@@ -180,6 +182,7 @@ public:
         k_param_fs_crash_check,
         k_param_throw_motor_start,
         k_param_terrain_follow,    // 94
+        k_param_avoid,
 
         // 97: RSSI
         k_param_rssi = 97,
@@ -231,13 +234,13 @@ public:
         k_param_pack_capacity,  // deprecated - can be deleted
         k_param_compass_enabled,
         k_param_compass,
-        k_param_sonar_enabled_old, // deprecated
+        k_param_rangefinder_enabled_old, // deprecated
         k_param_frame_orientation,
         k_param_optflow_enabled,    // deprecated
         k_param_fs_batt_voltage,
         k_param_ch7_option,
         k_param_auto_slew_rate,     // deprecated - can be deleted
-        k_param_sonar_type_old,     // deprecated
+        k_param_rangefinder_type_old,     // deprecated
         k_param_super_simple = 155,
         k_param_axis_enabled = 157, // deprecated - remove with next eeprom number change
         k_param_copter_leds_mode,   // deprecated - remove with next eeprom number change
@@ -279,7 +282,7 @@ public:
         k_param_rc_8,
         k_param_rc_10,
         k_param_rc_11,
-        k_param_throttle_min,
+        k_param_throttle_min,           // remove
         k_param_throttle_max,           // remove
         k_param_failsafe_throttle,
         k_param_throttle_fs_action,     // remove
@@ -291,7 +294,7 @@ public:
         k_param_radio_tuning_low,
         k_param_rc_speed = 192,
         k_param_failsafe_battery_enabled,
-        k_param_throttle_mid,
+        k_param_throttle_mid,           // remove
         k_param_failsafe_gps_enabled,   // remove
         k_param_rc_9,
         k_param_rc_12,
@@ -383,7 +386,7 @@ public:
     AP_Int16        rtl_altitude;
     AP_Int16        rtl_speed_cms;
     AP_Float        rtl_cone_slope;
-    AP_Float        sonar_gain;
+    AP_Float        rangefinder_gain;
 
     AP_Int8         failsafe_battery_enabled;   // battery failsafe enabled
     AP_Float        fs_batt_voltage;            // battery voltage below which failsafe will be triggered
@@ -413,10 +416,8 @@ public:
 
     // Throttle
     //
-    AP_Int16        throttle_min;
     AP_Int8         failsafe_throttle;
     AP_Int16        failsafe_throttle_value;
-    AP_Int16        throttle_mid;
     AP_Int16        throttle_deadzone;
 
     // Flight modes
@@ -528,6 +529,20 @@ public:
         p_alt_hold              (ALT_HOLD_P)
     {
     }
+};
+
+/*
+  2nd block of parameters, to avoid going past 256 top level keys
+ */
+class ParametersG2 {
+public:
+    ParametersG2(void) { AP_Param::setup_object_defaults(this, var_info); }
+
+    // var_info for holding Parameter information
+    static const struct AP_Param::GroupInfo var_info[];
+
+    // altitude at which nav control can start in takeoff
+    AP_Float takeoff_nav_alt;
 };
 
 extern const AP_Param::Info        var_info[];

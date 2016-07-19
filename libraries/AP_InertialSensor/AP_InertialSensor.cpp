@@ -11,8 +11,8 @@
 #include <AP_Vehicle/AP_Vehicle.h>
 
 #include "AP_InertialSensor.h"
+#include "AP_InertialSensor_BMI160.h"
 #include "AP_InertialSensor_Backend.h"
-#include "AP_InertialSensor_Flymaple.h"
 #include "AP_InertialSensor_HIL.h"
 #include "AP_InertialSensor_L3G4200D.h"
 #include "AP_InertialSensor_LSM9DS0.h"
@@ -43,7 +43,7 @@ extern const AP_HAL::HAL& hal;
 #define DEFAULT_ACCEL_FILTER 20
 #define DEFAULT_STILL_THRESH 2.5f
 #elif APM_BUILD_TYPE(APM_BUILD_APMrover2)
-#define DEFAULT_GYRO_FILTER  10
+#define DEFAULT_GYRO_FILTER  4
 #define DEFAULT_ACCEL_FILTER 10
 #define DEFAULT_STILL_THRESH 0.1f
 #else
@@ -54,13 +54,15 @@ extern const AP_HAL::HAL& hal;
 
 #define SAMPLE_UNIT 1
 
+#define GYRO_INIT_MAX_DIFF_DPS 0.1f
+
 // Class level parameters
 const AP_Param::GroupInfo AP_InertialSensor::var_info[] = {
     // @Param: PRODUCT_ID
     // @DisplayName: IMU Product ID
     // @Description: Which type of IMU is installed (read-only).
     // @User: Advanced
-    // @Values: 0:Unknown,1:APM1-1280,2:APM1-2560,88:APM2,3:SITL,4:PX4v1,5:PX4v2,256:Flymaple,257:Linux
+    // @Values: 0:Unknown,1:unused,2:unused,88:unused,3:SITL,4:PX4v1,5:PX4v2,256:unused,257:Linux
     AP_GROUPINFO("PRODUCT_ID",  0, AP_InertialSensor, _product_id,   0),
 
     /*
@@ -536,8 +538,6 @@ AP_InertialSensor::detect_backends(void)
     _add_backend(AP_InertialSensor_PX4::detect(*this));
 #elif HAL_INS_DEFAULT == HAL_INS_MPU9250_SPI
     _add_backend(AP_InertialSensor_MPU9250::probe(*this, hal.spi->get_device(HAL_INS_MPU9250_NAME)));
-#elif HAL_INS_DEFAULT == HAL_INS_FLYMAPLE
-    _add_backend(AP_InertialSensor_Flymaple::detect(*this));
 #elif HAL_INS_DEFAULT == HAL_INS_LSM9DS0
     _add_backend(AP_InertialSensor_LSM9DS0::probe(*this,
                  hal.spi->get_device(HAL_INS_LSM9DS0_G_NAME),
@@ -806,7 +806,7 @@ AP_InertialSensor::_init_gyro()
     for (uint8_t k=0; k<num_gyros; k++) {
         _gyro_offset[k].set(Vector3f());
         new_gyro_offset[k].zero();
-        best_diff[k] = 0;
+        best_diff[k] = -1.f;
         last_average[k].zero();
         converged[k] = false;
     }
@@ -862,10 +862,10 @@ AP_InertialSensor::_init_gyro()
         }
 
         for (uint8_t k=0; k<num_gyros; k++) {
-            if (j == 0) {
+            if (best_diff[k] < 0) {
                 best_diff[k] = diff_norm[k];
                 best_avg[k] = gyro_avg[k];
-            } else if (gyro_diff[k].length() < ToRad(0.1f)) {
+            } else if (gyro_diff[k].length() < ToRad(GYRO_INIT_MAX_DIFF_DPS)) {
                 // we want the average to be within 0.1 bit, which is 0.04 degrees/s
                 last_average[k] = (gyro_avg[k] * 0.5f) + (last_average[k] * 0.5f);
                 if (!converged[k] || last_average[k].length() < new_gyro_offset[k].length()) {
@@ -888,8 +888,10 @@ AP_InertialSensor::_init_gyro()
     hal.console->println();
     for (uint8_t k=0; k<num_gyros; k++) {
         if (!converged[k]) {
-            hal.console->printf("gyro[%u] did not converge: diff=%f dps\n",
-                                  (unsigned)k, (double)ToDeg(best_diff[k]));
+            hal.console->printf("gyro[%u] did not converge: diff=%f dps (expected < %f)\n",
+                                (unsigned)k,
+                                (double)ToDeg(best_diff[k]),
+                                (double)GYRO_INIT_MAX_DIFF_DPS);
             _gyro_offset[k] = best_avg[k];
             // flag calibration as failed for this gyro
             _gyro_cal_ok[k] = false;

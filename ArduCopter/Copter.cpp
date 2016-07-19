@@ -25,7 +25,6 @@ const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 Copter::Copter(void) :
     DataFlash{FIRMWARE_STRING},
     flight_modes(&g.flight_mode1),
-    sonar_enabled(true),
     mission(ahrs, 
             FUNCTOR_BIND_MEMBER(&Copter::start_command, bool, const AP_Mission::Mission_Command &),
             FUNCTOR_BIND_MEMBER(&Copter::verify_command_callback, bool, const AP_Mission::Mission_Command &),
@@ -52,7 +51,6 @@ Copter::Copter(void) :
     super_simple_cos_yaw(1.0),
     super_simple_sin_yaw(0.0f),
     initial_armed_bearing(0),
-    throttle_average(0.0f),
     desired_climb_rate(0),
     loiter_time_max(0),
     loiter_time(0),
@@ -60,9 +58,7 @@ Copter::Copter(void) :
     frsky_telemetry(ahrs, battery),
 #endif
     climb_rate(0),
-    sonar_alt(0),
-    sonar_alt_health(0),
-    target_sonar_alt(0.0f),
+    target_rangefinder_alt(0.0f),
     baro_alt(0),
     baro_climbrate(0.0f),
     land_accel_ef_filter(LAND_DETECTOR_ACCEL_LPF_CUTOFF),
@@ -80,6 +76,7 @@ Copter::Copter(void) :
     pos_control(ahrs, inertial_nav, motors, attitude_control,
                 g.p_alt_hold, g.p_vel_z, g.pid_accel_z,
                 g.p_pos_xy, g.pi_vel_xy),
+    avoid(ahrs, inertial_nav, fence),
     wp_nav(inertial_nav, ahrs, pos_control, attitude_control),
     circle_nav(inertial_nav, ahrs, pos_control),
     pmTest1(0),
@@ -95,7 +92,7 @@ Copter::Copter(void) :
     camera_mount(ahrs, current_loc),
 #endif
 #if AC_FENCE == ENABLED
-    fence(inertial_nav),
+    fence(ahrs, inertial_nav),
 #endif
 #if AC_RALLY == ENABLED
     rally(ahrs),

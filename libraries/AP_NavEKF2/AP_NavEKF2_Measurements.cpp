@@ -260,47 +260,42 @@ void NavEKF2_core::readIMUData()
     // Get current time stamp
     imuDataNew.time_ms = imuSampleTime_ms;
 
-    // remove gyro scale factor errors
-    imuDataNew.delAng.x = imuDataNew.delAng.x * stateStruct.gyro_scale.x;
-    imuDataNew.delAng.y = imuDataNew.delAng.y * stateStruct.gyro_scale.y;
-    imuDataNew.delAng.z = imuDataNew.delAng.z * stateStruct.gyro_scale.z;
-
-    // remove sensor bias errors
-    imuDataNew.delAng -= stateStruct.gyro_bias * (imuDataNew.delAngDT / dtEkfAvg);
-    imuDataNew.delVel.z -= stateStruct.accel_zbias * (imuDataNew.delVelDT / dtEkfAvg);
-
     // Accumulate the measurement time interval for the delta velocity and angle data
     imuDataDownSampledNew.delAngDT += imuDataNew.delAngDT;
     imuDataDownSampledNew.delVelDT += imuDataNew.delVelDT;
 
     // Rotate quaternon atitude from previous to new and normalise.
     // Accumulation using quaternions prevents introduction of coning errors due to downsampling
-    Quaternion deltaQuat;
-    deltaQuat.rotate(imuDataNew.delAng);
-    imuQuatDownSampleNew = imuQuatDownSampleNew*deltaQuat;
+    imuQuatDownSampleNew.rotate(imuDataNew.delAng);
     imuQuatDownSampleNew.normalize();
 
-    // Rotate the accumulated delta velocity into the new frame of reference created by the latest delta angle
-    // This prevents introduction of sculling errors due to downsampling
+    // Rotate the latest delta velocity into body frame at the start of accumulation
     Matrix3f deltaRotMat;
-    deltaQuat.inverse().rotation_matrix(deltaRotMat);
-    imuDataDownSampledNew.delVel = deltaRotMat*imuDataDownSampledNew.delVel;
+    imuQuatDownSampleNew.rotation_matrix(deltaRotMat);
 
-    // accumulate the latest delta velocity
-    imuDataDownSampledNew.delVel += imuDataNew.delVel;
+    // Apply the delta velocity to the delta velocity accumulator
+    imuDataDownSampledNew.delVel += deltaRotMat*imuDataNew.delVel;
 
     // Keep track of the number of IMU frames since the last state prediction
     framesSincePredict++;
 
     // If 10msec has elapsed, and the frontend has allowed us to start a new predict cycle, then store the accumulated IMU data
     // to be used by the state prediction, ignoring the frontend permission if more than 20msec has lapsed
-    if ((dtIMUavg*(float)framesSincePredict >= 0.01f && startPredictEnabled) || (dtIMUavg*(float)framesSincePredict >= 0.02f)) {
+    if ((dtIMUavg*(float)framesSincePredict >= EKF_TARGET_DT && startPredictEnabled) || (dtIMUavg*(float)framesSincePredict >= 2.0f*EKF_TARGET_DT)) {
+
         // convert the accumulated quaternion to an equivalent delta angle
         imuQuatDownSampleNew.to_axis_angle(imuDataDownSampledNew.delAng);
+
         // Time stamp the data
         imuDataDownSampledNew.time_ms = imuSampleTime_ms;
+
         // Write data to the FIFO IMU buffer
         storedIMU.push_youngest_element(imuDataDownSampledNew);
+
+        // calculate the achieved average time step rate for the EKF
+        float dtNow = constrain_float(0.5f*(imuDataDownSampledNew.delAngDT+imuDataDownSampledNew.delVelDT),0.0f,10.0f*EKF_TARGET_DT);
+        dtEkfAvg = 0.98f * dtEkfAvg + 0.02f * dtNow;
+
         // zero the accumulated IMU data and quaternion
         imuDataDownSampledNew.delAng.zero();
         imuDataDownSampledNew.delVel.zero();
@@ -308,21 +303,32 @@ void NavEKF2_core::readIMUData()
         imuDataDownSampledNew.delVelDT = 0.0f;
         imuQuatDownSampleNew[0] = 1.0f;
         imuQuatDownSampleNew[3] = imuQuatDownSampleNew[2] = imuQuatDownSampleNew[1] = 0.0f;
+
         // reset the counter used to let the frontend know how many frames have elapsed since we started a new update cycle
         framesSincePredict = 0;
+
         // set the flag to let the filter know it has new IMU data nad needs to run
         runUpdates = true;
+
+        // extract the oldest available data from the FIFO buffer
+        imuDataDelayed = storedIMU.pop_oldest_element();
+
+        // protect against delta time going to zero
+        // TODO - check if calculations can tolerate 0
+        float minDT = 0.1f*dtEkfAvg;
+        imuDataDelayed.delAngDT = MAX(imuDataDelayed.delAngDT,minDT);
+        imuDataDelayed.delVelDT = MAX(imuDataDelayed.delVelDT,minDT);
+
+        // correct the extracted IMU data for sensor errors
+        delAngCorrected = imuDataDelayed.delAng;
+        delVelCorrected = imuDataDelayed.delVel;
+        correctDeltaAngle(delAngCorrected, imuDataDelayed.delAngDT);
+        correctDeltaVelocity(delVelCorrected, imuDataDelayed.delVelDT);
+
     } else {
         // we don't have new IMU data in the buffer so don't run filter updates on this time step
         runUpdates = false;
     }
-
-    // extract the oldest available data from the FIFO buffer
-    imuDataDelayed = storedIMU.pop_oldest_element();
-    float minDT = 0.1f*dtEkfAvg;
-    imuDataDelayed.delAngDT = MAX(imuDataDelayed.delAngDT,minDT);
-    imuDataDelayed.delVelDT = MAX(imuDataDelayed.delVelDT,minDT);
-
 }
 
 // read the delta velocity and corresponding time interval from the IMU
@@ -371,8 +377,8 @@ void NavEKF2_core::readGpsData()
             // read the NED velocity from the GPS
             gpsDataNew.vel = _ahrs->get_gps().velocity();
 
-            // Use the speed accuracy from the GPS if available, otherwise set it to zero.
-            // Apply a decaying envelope filter with a 5 second time constant to the raw speed accuracy data
+            // Use the speed and position accuracy from the GPS if available, otherwise set it to zero.
+            // Apply a decaying envelope filter with a 5 second time constant to the raw accuracy data
             float alpha = constrain_float(0.0002f * (lastTimeGpsReceived_ms - secondLastGpsTime_ms),0.0f,1.0f);
             gpsSpdAccuracy *= (1.0f - alpha);
             float gpsSpdAccRaw;
@@ -380,6 +386,15 @@ void NavEKF2_core::readGpsData()
                 gpsSpdAccuracy = 0.0f;
             } else {
                 gpsSpdAccuracy = MAX(gpsSpdAccuracy,gpsSpdAccRaw);
+                gpsSpdAccuracy = MIN(gpsSpdAccuracy,50.0f);
+            }
+            gpsPosAccuracy *= (1.0f - alpha);
+            float gpsPosAccRaw;
+            if (!_ahrs->get_gps().horizontal_accuracy(gpsPosAccRaw)) {
+                gpsPosAccuracy = 0.0f;
+            } else {
+                gpsPosAccuracy = MAX(gpsPosAccuracy,gpsPosAccRaw);
+                gpsPosAccuracy = MIN(gpsPosAccuracy,100.0f);
             }
 
             // check if we have enough GPS satellites and increase the gps noise scaler if we don't
@@ -402,10 +417,10 @@ void NavEKF2_core::readGpsData()
             if (PV_AidingMode != AID_ABSOLUTE) {
                 // Pre-alignment checks
                 gpsGoodToAlign = calcGpsGoodToAlign();
-            } else {
-                // Post-alignment checks
-                calcGpsGoodForFlight();
             }
+
+            // Post-alignment checks
+            calcGpsGoodForFlight();
 
             // Read the GPS locaton in WGS-84 lat,long,height coordinates
             const struct Location &gpsloc = _ahrs->get_gps().location();
@@ -413,10 +428,14 @@ void NavEKF2_core::readGpsData()
             // Set the EKF origin and magnetic field declination if not previously set  and GPS checks have passed
             if (gpsGoodToAlign && !validOrigin) {
                 setOrigin();
-                // Now we know the location we have an estimate for the magnetic field declination and adjust the earth field accordingly
+
+                // set the NE earth magnetic field states using the published declination
+                // and set the corresponding variances and covariances
                 alignMagStateDeclination();
+
                 // Set the height of the NED origin to ‘height of baro height datum relative to GPS height datum'
                 EKF_origin.alt = gpsloc.alt - baroDataNew.hgt;
+
             }
 
             // convert GPS measurements to local NED and save to buffer to be fused later if we have a valid origin
@@ -428,15 +447,8 @@ void NavEKF2_core::readGpsData()
                 gpsNotAvailable = false;
             }
 
-            // Commence GPS aiding when able to
-            if (readyToUseGPS() && PV_AidingMode != AID_ABSOLUTE) {
-                PV_AidingMode = AID_ABSOLUTE;
-                // Initialise EKF position and velocity states to last GPS measurement
-                ResetPosition();
-                ResetVelocity();
-            }
-
             frontend->logging.log_gps = true;
+
         } else {
             // report GPS fix status
             gpsCheckStatus.bad_fix = true;

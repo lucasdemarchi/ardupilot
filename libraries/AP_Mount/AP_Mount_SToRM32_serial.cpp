@@ -3,7 +3,7 @@
 #include "AP_Mount_SToRM32_serial.h"
 #include <AP_HAL/AP_HAL.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>
-#include <GCS_MAVLink/include/mavlink/v1.0/checksum.h>
+#include <GCS_MAVLink/include/mavlink/v2.0/checksum.h>
 #include <AP_HAL/utility/RingBuffer.h>
 
 extern const AP_HAL::HAL& hal;
@@ -236,7 +236,7 @@ void AP_Mount_SToRM32_serial::read_incoming() {
             continue;
         }
 
-        _buffer.bytes[_reply_counter++] = data;
+        _buffer[_reply_counter++] = data;
         if (_reply_counter == _reply_length) {
             parse_reply();
 
@@ -266,7 +266,7 @@ void AP_Mount_SToRM32_serial::parse_reply() {
 
     switch (_reply_type) {
         case ReplyType_DATA:
-            crc = crc_calculate(_buffer.bytes, sizeof(_buffer.data)-3);
+            crc = crc_calculate(&_buffer[0], sizeof(_buffer.data) - 3);
             crc_ok = crc == _buffer.data.crc;
             if (!crc_ok) {
                 break;
@@ -277,7 +277,8 @@ void AP_Mount_SToRM32_serial::parse_reply() {
             _current_angle.z = _buffer.data.imu1_yaw;
             break;
         case ReplyType_ACK:
-            crc = crc_calculate(&_buffer.bytes[1], sizeof(SToRM32_reply_ack_struct)-3);
+            crc = crc_calculate(&_buffer[1],
+                                sizeof(SToRM32_reply_ack_struct) - 3);
             crc_ok = crc == _buffer.ack.crc;
             break;
         default:

@@ -9,6 +9,7 @@
 #include <AC_AttitudeControl/AC_PosControl.h>      // Position control library
 #include <AC_AttitudeControl/AC_AttitudeControl.h> // Attitude control library
 #include <AP_Terrain/AP_Terrain.h>
+#include <AC_Avoidance/AC_Avoid.h>                 // Stop at fence library
 
 // loiter maximum velocities and accelerations
 #define WPNAV_ACCELERATION              100.0f      // defines the default velocity vs distant curve.  maximum acceleration in cm/s/s that position controller asks for from acceleration controller
@@ -40,6 +41,8 @@
 
 #define WPNAV_YAW_DIST_MIN                 200      // minimum track length which will lead to target yaw being updated to point at next waypoint.  Under this distance the yaw target will be frozen at the current heading
 
+#define WPNAV_RANGEFINDER_FILT_Z         0.25f      // range finder distance filtered at 0.25hz
+
 class AC_WPNav
 {
 public:
@@ -57,6 +60,12 @@ public:
     /// provide pointer to terrain database
     void set_terrain(AP_Terrain* terrain_ptr) { _terrain = terrain_ptr; }
 
+    /// provide pointer to avoidance library
+    void set_avoidance(AC_Avoid* avoid_ptr) { _avoid = avoid_ptr; }
+
+    /// provide rangefinder altitude
+    void set_rangefinder_alt(bool use, bool healthy, float alt_cm) { _rangefinder_use = use; _rangefinder_healthy = healthy; _rangefinder_alt_cm = alt_cm; }
+
     ///
     /// loiter controller
     ///
@@ -67,10 +76,6 @@ public:
 
     /// init_loiter_target - initialize's loiter position and feed-forward velocity from current pos and velocity
     void init_loiter_target();
-
-    /// shift_loiter_target - shifts the loiter target by the given pos_adjustment
-    ///     used by precision landing to adjust horizontal position target
-    void shift_loiter_target(const Vector3f &pos_adjustment);
 
     /// loiter_soften_for_landing - reduce response for landing
     void loiter_soften_for_landing();
@@ -235,8 +240,8 @@ public:
     ///
 
     /// get desired roll, pitch which should be fed into stabilize controllers
-    int32_t get_roll() const { return _pos_control.get_roll(); };
-    int32_t get_pitch() const { return _pos_control.get_pitch(); };
+    int32_t get_roll() const { return _pos_control.get_roll(); }
+    int32_t get_pitch() const { return _pos_control.get_pitch(); }
 
     /// get_desired_alt - get desired altitude (in cm above home) from loiter or wp controller which should be fed into throttle controller
     float get_desired_alt() const { return _pos_control.get_alt_target(); }
@@ -310,6 +315,7 @@ protected:
     AC_PosControl&          _pos_control;
     const AC_AttitudeControl& _attitude_control;
     AP_Terrain              *_terrain = NULL;
+    AC_Avoid                *_avoid = NULL;
 
     // parameters
     AP_Float    _loiter_speed_cms;      // maximum horizontal speed in cm/s while in loiter
@@ -356,4 +362,7 @@ protected:
     // terrain following variables
     bool        _terrain_alt = false;   // true if origin and destination.z are alt-above-terrain, false if alt-above-ekf-origin
     bool        _ekf_origin_terrain_alt_set = false;
+    bool        _rangefinder_use = false;
+    bool        _rangefinder_healthy = false;
+    float       _rangefinder_alt_cm = 0.0f;
 };

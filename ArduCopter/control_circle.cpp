@@ -46,7 +46,7 @@ void Copter::circle_run()
         // To-Do: add some initialisation of position controllers
 #if FRAME_CONFIG == HELI_FRAME  // Helicopters always stabilize roll/pitch/yaw
         // call attitude controller
-        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw_smooth(0, 0, 0, get_smoothing_gain());
+        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(0, 0, 0, get_smoothing_gain());
         attitude_control.set_throttle_out(0,false,g.throttle_filt);
 #else
         motors.set_desired_spool_state(AP_Motors::DESIRED_SPIN_WHEN_ARMED);
@@ -85,14 +85,14 @@ void Copter::circle_run()
 
     // call attitude controller
     if (circle_pilot_yaw_override) {
-        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(circle_nav.get_roll(), circle_nav.get_pitch(), target_yaw_rate);
+        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(circle_nav.get_roll(), circle_nav.get_pitch(), target_yaw_rate, get_smoothing_gain());
     }else{
-        attitude_control.input_euler_angle_roll_pitch_yaw(circle_nav.get_roll(), circle_nav.get_pitch(), circle_nav.get_yaw(),true);
+        attitude_control.input_euler_angle_roll_pitch_yaw(circle_nav.get_roll(), circle_nav.get_pitch(), circle_nav.get_yaw(),true, get_smoothing_gain());
     }
 
-    // run altitude controller
-    if (sonar_enabled && (sonar_alt_health >= SONAR_ALT_HEALTH_MAX)) {
-        // if sonar is ok, use surface tracking
+    // adjust climb rate using rangefinder
+    if (rangefinder_alt_ok()) {
+        // if rangefinder is ok, use surface tracking
         target_climb_rate = get_surface_tracking_climb_rate(target_climb_rate, pos_control.get_alt_target(), G_Dt);
     }
     // update altitude target and call position controller

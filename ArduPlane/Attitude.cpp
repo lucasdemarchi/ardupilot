@@ -14,7 +14,7 @@ float Plane::get_speed_scaler(void)
         if (aspeed > auto_state.highest_airspeed) {
             auto_state.highest_airspeed = aspeed;
         }
-        if (aspeed > 0) {
+        if (aspeed > 0.0001f) {
             speed_scaler = g.scaling_speed / aspeed;
         } else {
             speed_scaler = 2.0;
@@ -38,7 +38,7 @@ float Plane::get_speed_scaler(void)
  */
 bool Plane::stick_mixing_enabled(void)
 {
-    if (auto_throttle_mode) {
+    if (auto_throttle_mode && auto_navigation_mode) {
         // we're in an auto mode. Check the stick mixing flag
         if (g.stick_mixing != STICK_MIXING_DISABLED &&
             geofence_stickmixing() &&
@@ -200,8 +200,10 @@ void Plane::stabilize_stick_mixing_fbw()
     nav_roll_cd = constrain_int32(nav_roll_cd, -roll_limit_cd, roll_limit_cd);
     
     float pitch_input = channel_pitch->norm_input();
-    if (fabsf(pitch_input) > 0.5f) {
+    if (pitch_input > 0.5f) {
         pitch_input = (3*pitch_input - 1);
+    } else if (pitch_input < -0.5f) {
+        pitch_input = (3*pitch_input + 1);
     }
     if (fly_inverted()) {
         pitch_input = -pitch_input;
@@ -427,7 +429,16 @@ void Plane::calc_throttle()
         return;
     }
 
-    channel_throttle->set_servo_out(SpdHgt_Controller->get_throttle_demand());
+    int32_t commanded_throttle = SpdHgt_Controller->get_throttle_demand();
+
+    // Received an external msg that guides throttle in the last 3 seconds?
+    if (control_mode == GUIDED &&
+            plane.guided_state.last_forced_throttle_ms > 0 &&
+            millis() - plane.guided_state.last_forced_throttle_ms < 3000) {
+        commanded_throttle = plane.guided_state.forced_throttle;
+    }
+
+    channel_throttle->set_servo_out(commanded_throttle);
 }
 
 /*****************************************
@@ -443,12 +454,23 @@ void Plane::calc_nav_yaw_coordinated(float speed_scaler)
     if (control_mode == STABILIZE && rudder_input != 0) {
         disable_integrator = true;
     }
-    steering_control.rudder = yawController.get_servo_out(speed_scaler, disable_integrator);
 
-    // add in rudder mixing from roll
-    steering_control.rudder += channel_roll->get_servo_out() * g.kff_rudder_mix;
-    steering_control.rudder += rudder_input;
-    steering_control.rudder = constrain_int16(steering_control.rudder, -4500, 4500);
+    int16_t commanded_rudder;
+
+    // Received an external msg that guides yaw in the last 3 seconds?
+    if (control_mode == GUIDED &&
+            plane.guided_state.last_forced_rpy_ms.z > 0 &&
+            millis() - plane.guided_state.last_forced_rpy_ms.z < 3000) {
+        commanded_rudder = plane.guided_state.forced_rpy_cd.z;
+    } else {
+        commanded_rudder = yawController.get_servo_out(speed_scaler, disable_integrator);
+
+        // add in rudder mixing from roll
+        commanded_rudder += channel_roll->get_servo_out() * g.kff_rudder_mix;
+        commanded_rudder += rudder_input;
+    }
+
+    steering_control.rudder = constrain_int16(commanded_rudder, -4500, 4500);
 }
 
 /*
@@ -517,8 +539,16 @@ void Plane::calc_nav_pitch()
 {
     // Calculate the Pitch of the plane
     // --------------------------------
-    nav_pitch_cd = SpdHgt_Controller->get_pitch_demand();
-    nav_pitch_cd = constrain_int32(nav_pitch_cd, pitch_limit_min_cd, aparm.pitch_limit_max_cd.get());
+    int32_t commanded_pitch = SpdHgt_Controller->get_pitch_demand();
+
+    // Received an external msg that guides roll in the last 3 seconds?
+    if (control_mode == GUIDED &&
+            plane.guided_state.last_forced_rpy_ms.y > 0 &&
+            millis() - plane.guided_state.last_forced_rpy_ms.y < 3000) {
+        commanded_pitch = plane.guided_state.forced_rpy_cd.y;
+    }
+
+    nav_pitch_cd = constrain_int32(commanded_pitch, pitch_limit_min_cd, aparm.pitch_limit_max_cd.get());
 }
 
 
@@ -527,7 +557,16 @@ void Plane::calc_nav_pitch()
  */
 void Plane::calc_nav_roll()
 {
-    nav_roll_cd = constrain_int32(nav_controller->nav_roll_cd(), -roll_limit_cd, roll_limit_cd);
+    int32_t commanded_roll = nav_controller->nav_roll_cd();
+
+    // Received an external msg that guides roll in the last 3 seconds?
+    if (control_mode == GUIDED &&
+            plane.guided_state.last_forced_rpy_ms.x > 0 &&
+            millis() - plane.guided_state.last_forced_rpy_ms.x < 3000) {
+        commanded_roll = plane.guided_state.forced_rpy_cd.x;
+    }
+
+    nav_roll_cd = constrain_int32(commanded_roll, -roll_limit_cd, roll_limit_cd);
     update_load_factor();
 }
 
@@ -591,11 +630,13 @@ void Plane::flap_slew_limit(int8_t &last_value, int8_t &new_value)
 */
 bool Plane::suppress_throttle(void)
 {
+#if PARACHUTE == ENABLED
     if (auto_throttle_mode && parachute.release_initiated()) {
         // throttle always suppressed in auto-throttle modes after parachute release initiated
         throttle_suppressed = true;
         return true;
     }
+#endif
 
     if (!throttle_suppressed) {
         // we've previously met a condition for unsupressing the throttle
@@ -642,8 +683,6 @@ bool Plane::suppress_throttle(void)
     if (relative_altitude_abs_cm() >= 1000) {
         // we're more than 10m from the home altitude
         throttle_suppressed = false;
-        gcs_send_text_fmt(MAV_SEVERITY_INFO, "Throttle enabled. Altitude %.2f",
-                          (double)(relative_altitude_abs_cm()*0.01f));
         return false;
     }
 
@@ -653,16 +692,12 @@ bool Plane::suppress_throttle(void)
         // groundspeed with bad GPS reception
         if ((!ahrs.airspeed_sensor_enabled()) || airspeed.get_airspeed() >= 5) {
             // we're moving at more than 5 m/s
-            gcs_send_text_fmt(MAV_SEVERITY_INFO, "Throttle enabled. Speed %.2f airspeed %.2f",
-                              (double)gps.ground_speed(),
-                              (double)airspeed.get_airspeed());
             throttle_suppressed = false;
             return false;        
         }
     }
 
     if (quadplane.is_flying()) {
-        gcs_send_text_fmt(MAV_SEVERITY_INFO, "Throttle enabled VTOL");
         throttle_suppressed = false;
     }
 
@@ -681,6 +716,15 @@ void Plane::channel_output_mixer(uint8_t mixing_type, int16_t & chan1_out, int16
     // first get desired elevator and rudder as -500..500 values
     c1 = chan1_out - 1500;
     c2 = chan2_out - 1500;
+
+    // apply MIXING_OFFSET to input channels using long-integer version
+    //  of formula:  x = x * (g.mixing_offset/100.0 + 1.0)
+    //  -100 => 2x on 'c1', 100 => 2x on 'c2'
+    if (g.mixing_offset < 0) {
+        c1 = (int16_t)(((int32_t)c1) * (-g.mixing_offset+100) / 100);
+    } else if (g.mixing_offset > 0) {
+        c2 = (int16_t)(((int32_t)c2) * (g.mixing_offset+100) / 100);
+    }
 
     v1 = (c1 - c2) * g.mixing_gain;
     v2 = (c1 + c2) * g.mixing_gain;
@@ -870,12 +914,6 @@ void Plane::set_servos(void)
         RC_Channel_aux::copy_radio_in_out(RC_Channel_aux::k_aileron_with_input);
         RC_Channel_aux::copy_radio_in_out(RC_Channel_aux::k_elevator_with_input);
 
-        if (g.mix_mode == 0 && g.elevon_output == MIXING_DISABLED) {
-            // set any differential spoilers to follow the elevons in
-            // manual mode. 
-            RC_Channel_aux::set_radio(RC_Channel_aux::k_dspoiler1, channel_roll->get_radio_out());
-            RC_Channel_aux::set_radio(RC_Channel_aux::k_dspoiler2, channel_pitch->get_radio_out());
-        }
     } else {
         if (g.mix_mode == 0) {
             // both types of secondary aileron are slaved to the roll servo out
@@ -1013,7 +1051,8 @@ void Plane::set_servos(void)
                     control_mode == TRAINING ||
                     control_mode == ACRO ||
                     control_mode == FLY_BY_WIRE_A ||
-                    control_mode == AUTOTUNE)) {
+                    control_mode == AUTOTUNE) &&
+                   !failsafe.ch3_counter) {
             // manual pass through of throttle while in FBWA or
             // STABILIZE mode with THR_PASS_STAB set
             channel_throttle->set_radio_out(channel_throttle->get_radio_in());
@@ -1071,6 +1110,12 @@ void Plane::set_servos(void)
                     auto_flap_percent = g.takeoff_flap_percent;
                 }
                 break;
+            case AP_SpdHgtControl::FLIGHT_NORMAL:
+                if (auto_flap_percent != 0 && in_preLaunch_flight_stage()) {
+                    // TODO: move this to a new FLIGHT_PRE_TAKEOFF stage
+                    auto_flap_percent = g.takeoff_flap_percent;
+                }
+                break;
             case AP_SpdHgtControl::FLIGHT_LAND_APPROACH:
             case AP_SpdHgtControl::FLIGHT_LAND_PREFLARE:
             case AP_SpdHgtControl::FLIGHT_LAND_FINAL:
@@ -1115,6 +1160,43 @@ void Plane::set_servos(void)
         channel_output_mixer(g.vtail_output, channel_pitch, channel_rudder);
     } else if (g.elevon_output != MIXING_DISABLED) {
         channel_output_mixer(g.elevon_output, channel_pitch, channel_roll);
+        // if (both) differential spoilers setup then apply rudder
+        //  control into splitting the two elevons on the side of
+        //  the aircraft where we want to induce additional drag:
+        if (RC_Channel_aux::function_assigned(RC_Channel_aux::k_dspoiler1) &&
+            RC_Channel_aux::function_assigned(RC_Channel_aux::k_dspoiler2)) {
+            int16_t ch3 = channel_roll->get_radio_out();    //diff spoiler 1
+            int16_t ch4 = channel_pitch->get_radio_out();   //diff spoiler 2
+            // convert rudder-servo output (-4500 to 4500) to PWM offset
+            //  value (-500 to 500) and multiply by DSPOILR_RUD_RATE/100
+            //  (rudder->servo_out * 500 / SERVO_MAX * dspoiler_rud_rate/100):
+            int16_t ruddVal = (int16_t)((int32_t)(channel_rudder->get_servo_out()) *
+                                        g.dspoiler_rud_rate / (SERVO_MAX/5));
+            if (ruddVal != 0) {   //if nonzero rudder then apply to spoilers
+                int16_t ch1 = ch3;          //elevon 1
+                int16_t ch2 = ch4;          //elevon 2
+                if (ruddVal > 0) {     //apply rudder to right or left side
+                    ch1 += ruddVal;
+                    ch3 -= ruddVal;
+                } else {
+                    ch2 += ruddVal;
+                    ch4 -= ruddVal;
+                }
+                // change elevon 1 & 2 positions; constrain min/max:
+                channel_roll->set_radio_out(constrain_int16(ch1, 900, 2100));
+                channel_pitch->set_radio_out(constrain_int16(ch2, 900, 2100));
+                // constrain min/max for intermediate dspoiler positions:
+                ch3 = constrain_int16(ch3, 900, 2100);
+                ch4 = constrain_int16(ch4, 900, 2100);
+            }
+            // set positions of differential spoilers (convert PWM
+            //  900-2100 range to servo output (-4500 to 4500)
+            //  and use function that supports rev/min/max/trim):
+            RC_Channel_aux::set_servo_out_for(RC_Channel_aux::k_dspoiler1,
+                                              (ch3-(int16_t)1500) * (int16_t)(SERVO_MAX/300) / (int16_t)2);
+            RC_Channel_aux::set_servo_out_for(RC_Channel_aux::k_dspoiler2,
+                                              (ch4-(int16_t)1500) * (int16_t)(SERVO_MAX/300) / (int16_t)2);
+        }
     }
 
     if (!arming.is_armed()) {
@@ -1147,8 +1229,7 @@ void Plane::set_servos(void)
 #if HIL_SUPPORT
     if (g.hil_mode == 1) {
         // get the servos to the GCS immediately for HIL
-        if (comm_get_txspace(MAVLINK_COMM_0) >= 
-            MAVLINK_MSG_ID_RC_CHANNELS_SCALED_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) {
+        if (HAVE_PAYLOAD_SPACE(MAVLINK_COMM_0, RC_CHANNELS_SCALED)) {
             send_servo_out(MAVLINK_COMM_0);
         }
         if (!g.hil_servos) {
@@ -1259,22 +1340,6 @@ bool Plane::allow_reverse_thrust(void)
     }
 
     return allow;
-}
-
-void Plane::demo_servos(uint8_t i) 
-{
-    while(i > 0) {
-        gcs_send_text(MAV_SEVERITY_INFO,"Demo servos");
-        demoing_servos = true;
-        servo_write(1, 1400);
-        hal.scheduler->delay(400);
-        servo_write(1, 1600);
-        hal.scheduler->delay(200);
-        servo_write(1, 1500);
-        demoing_servos = false;
-        hal.scheduler->delay(400);
-        i--;
-    }
 }
 
 /*

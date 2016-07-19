@@ -10,7 +10,6 @@
 #define HAL_BOARD_SITL     3
 #define HAL_BOARD_SMACCM   4 // unused
 #define HAL_BOARD_PX4      5
-#define HAL_BOARD_FLYMAPLE 6
 #define HAL_BOARD_LINUX    7
 #define HAL_BOARD_VRBRAIN  8
 #define HAL_BOARD_QURT     9
@@ -57,7 +56,6 @@
 #define HAL_INS_MPU60XX_I2C 3
 #define HAL_INS_HIL     4
 #define HAL_INS_PX4     5
-#define HAL_INS_FLYMAPLE 6
 #define HAL_INS_L3G4200D 7
 #define HAL_INS_VRBRAIN  8
 #define HAL_INS_MPU9250_SPI  9
@@ -108,7 +106,6 @@
    Note that these are only approximate, not exact CPU speeds.
  */
 #define HAL_CPU_CLASS_16   1   // DEPRECATED: 16Mhz, AVR2560 or similar
-#define HAL_CPU_CLASS_75   2   // 75Mhz, Flymaple or similar
 #define HAL_CPU_CLASS_150  3   // 150Mhz, PX4 or similar, assumes
                                // hardware floating point. Assumes tens
                                // of kilobytes of memory available
@@ -144,26 +141,6 @@
 #define HAL_GPIO_LED_ON           LOW
 #define HAL_GPIO_LED_OFF          HIGH
 
-#elif CONFIG_HAL_BOARD == HAL_BOARD_FLYMAPLE
-#define HAL_BOARD_NAME "FLYMAPLE"
-#define HAL_CPU_CLASS HAL_CPU_CLASS_75
-#define HAL_STORAGE_SIZE            4096
-#define HAL_STORAGE_SIZE_AVAILABLE  HAL_STORAGE_SIZE
-#define HAL_INS_DEFAULT HAL_INS_FLYMAPLE
-#define HAL_BARO_DEFAULT HAL_BARO_BMP085
-#define HAL_BARO_BMP085_BUS 1
-#define HAL_BARO_BMP085_I2C_ADDR 0x77
-#define HAL_COMPASS_DEFAULT HAL_COMPASS_HMC5843
-#define HAL_COMPASS_HMC5843_I2C_BUS 1
-#define HAL_COMPASS_HMC5843_I2C_ADDR 0x1E
-#define HAL_SERIAL0_BAUD_DEFAULT 115200
-#define CONFIG_HAL_BOARD_SUBTYPE HAL_BOARD_SUBTYPE_NONE
-#define HAL_GPIO_A_LED_PIN        13
-#define HAL_GPIO_B_LED_PIN        13
-#define HAL_GPIO_C_LED_PIN        13
-#define HAL_GPIO_LED_ON           LOW
-#define HAL_GPIO_LED_OFF          HIGH
-
 #elif CONFIG_HAL_BOARD == HAL_BOARD_PX4
 #define HAL_BOARD_NAME "PX4"
 #define HAL_CPU_CLASS HAL_CPU_CLASS_150
@@ -181,6 +158,8 @@
 #else
 #define CONFIG_HAL_BOARD_SUBTYPE HAL_BOARD_SUBTYPE_PX4_V2
 #define HAL_STORAGE_SIZE            16384
+#define HAL_HAVE_IMU_HEATER         1 // for Pixhawk2
+#define HAL_IMU_TEMP_DEFAULT       -1 // disabled
 #endif
 #define HAL_GPIO_A_LED_PIN        27
 #define HAL_GPIO_B_LED_PIN        26
@@ -229,6 +208,8 @@
 #define HAL_BARO_DEFAULT HAL_BARO_MS5607_I2C
 #define HAL_BARO_MS5607_I2C_BUS 1
 #define HAL_BARO_MS5607_I2C_ADDR 0x77
+#define HAL_HAVE_IMU_HEATER 1
+#define HAL_IMU_TEMP_DEFAULT 55
 #define HAL_UTILS_HEAT HAL_LINUX_HEAT_PWM
 #define HAL_LINUX_HEAT_PWM_NUM  6
 #define HAL_LINUX_HEAT_KP 20000
@@ -250,6 +231,8 @@
 #define HAL_FLOW_PX4_BOTTOM_FLOW_FEATURE_THRESHOLD 30
 #define HAL_FLOW_PX4_BOTTOM_FLOW_VALUE_THRESHOLD 5000
 #define HAL_PARAM_DEFAULTS_PATH "/etc/arducopter/bebop.parm"
+#define HAL_RCOUT_BEBOP_BLDC_I2C_BUS 1
+#define HAL_RCOUT_BEBOP_BLDC_I2C_ADDR 0x08
 /* focal length 3.6 um, 2x binning in each direction
  * 240x240 crop rescaled to 64x64 */
 #define HAL_FLOW_PX4_FOCAL_LENGTH_MILLIPX (2.5 / (3.6 * 2.0 * 240 / 64))
@@ -521,4 +504,8 @@
 
 #ifndef HAL_PARAM_DEFAULTS_PATH
 #define HAL_PARAM_DEFAULTS_PATH NULL
+#endif
+
+#ifndef HAL_HAVE_IMU_HEATER
+#define HAL_HAVE_IMU_HEATER 0
 #endif

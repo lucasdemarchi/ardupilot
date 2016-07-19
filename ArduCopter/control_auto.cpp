@@ -138,6 +138,9 @@ void Copter::auto_takeoff_start(const Location& dest_loc)
 
     // clear i term when we're taking off
     set_throttle_takeoff();
+
+    // get initial alt for TKOFF_NAV_ALT
+    auto_takeoff_set_start_alt();
 }
 
 // auto_takeoff_run - takeoff in auto mode
@@ -150,7 +153,7 @@ void Copter::auto_takeoff_run()
         wp_nav.shift_wp_origin_to_current_pos();
 #if FRAME_CONFIG == HELI_FRAME  // Helicopters always stabilize roll/pitch/yaw
         // call attitude controller
-        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw_smooth(0, 0, 0, get_smoothing_gain());
+        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(0, 0, 0, get_smoothing_gain());
         attitude_control.set_throttle_out(0,false,g.throttle_filt);
 #else   // multicopters do not stabilize roll/pitch/yaw when disarmed
         motors.set_desired_spool_state(AP_Motors::DESIRED_SPIN_WHEN_ARMED);
@@ -178,8 +181,8 @@ void Copter::auto_takeoff_run()
     // call z-axis position controller (wpnav should have already updated it's alt target)
     pos_control.update_z_controller();
 
-    // roll & pitch from waypoint controller, yaw rate from pilot
-    attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), target_yaw_rate);
+    // call attitude controller
+    auto_takeoff_attitude_run(target_yaw_rate);
 }
 
 // auto_wp_start - initialises waypoint controller to implement flying to a particular destination
@@ -206,6 +209,7 @@ void Copter::auto_wp_start(const Location_Class& dest_loc)
     if (!wp_nav.set_wp_destination(dest_loc)) {
         // failure to set destination can only be because of missing terrain data
         failsafe_terrain_on_event();
+        return;
     }
 
     // initialise yaw
@@ -225,7 +229,7 @@ void Copter::auto_wp_run()
         //    (of course it would be better if people just used take-off)
 #if FRAME_CONFIG == HELI_FRAME  // Helicopters always stabilize roll/pitch/yaw
         // call attitude controller
-        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw_smooth(0, 0, 0, get_smoothing_gain());
+        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(0, 0, 0, get_smoothing_gain());
         attitude_control.set_throttle_out(0,false,g.throttle_filt);
 #else   // multicopters do not stabilize roll/pitch/yaw when disarmed
         motors.set_desired_spool_state(AP_Motors::DESIRED_SPIN_WHEN_ARMED);
@@ -258,10 +262,10 @@ void Copter::auto_wp_run()
     // call attitude controller
     if (auto_yaw_mode == AUTO_YAW_HOLD) {
         // roll & pitch from waypoint controller, yaw rate from pilot
-        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), target_yaw_rate);
+        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), target_yaw_rate, get_smoothing_gain());
     }else{
         // roll, pitch from waypoint controller, yaw heading from auto_heading()
-        attitude_control.input_euler_angle_roll_pitch_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), get_auto_heading(),true);
+        attitude_control.input_euler_angle_roll_pitch_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), get_auto_heading(),true, get_smoothing_gain());
     }
 }
 
@@ -275,9 +279,9 @@ void Copter::auto_spline_start(const Location_Class& destination, bool stopped_a
 
     // initialise wpnav
     if (!wp_nav.set_spline_destination(destination, stopped_at_start, seg_end_type, next_destination)) {
-        // failure to set destination (likely because of missing terrain data)
-        Log_Write_Error(ERROR_SUBSYSTEM_NAVIGATION, ERROR_CODE_FAILED_TO_SET_DESTINATION);
-        // To-Do: handle failure
+        // failure to set destination can only be because of missing terrain data
+        failsafe_terrain_on_event();
+        return;
     }
 
     // initialise yaw
@@ -297,7 +301,7 @@ void Copter::auto_spline_run()
         //    (of course it would be better if people just used take-off)
 #if FRAME_CONFIG == HELI_FRAME  // Helicopters always stabilize roll/pitch/yaw
         // call attitude controller
-        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw_smooth(0, 0, 0, get_smoothing_gain());
+        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(0, 0, 0, get_smoothing_gain());
         attitude_control.set_throttle_out(0,false,g.throttle_filt);
 #else   // multicopters do not stabilize roll/pitch/yaw when disarmed
         attitude_control.set_throttle_out_unstabilized(0,true,g.throttle_filt);
@@ -330,10 +334,10 @@ void Copter::auto_spline_run()
     // call attitude controller
     if (auto_yaw_mode == AUTO_YAW_HOLD) {
         // roll & pitch from waypoint controller, yaw rate from pilot
-        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), target_yaw_rate);
+        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), target_yaw_rate, get_smoothing_gain());
     }else{
         // roll, pitch from waypoint controller, yaw heading from auto_heading()
-        attitude_control.input_euler_angle_roll_pitch_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), get_auto_heading(), true);
+        attitude_control.input_euler_angle_roll_pitch_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), get_auto_heading(), true, get_smoothing_gain());
     }
 }
 
@@ -356,8 +360,9 @@ void Copter::auto_land_start(const Vector3f& destination)
     // initialise loiter target destination
     wp_nav.init_loiter_target(destination);
 
-    // initialise altitude target to stopping point
-    pos_control.set_target_to_stopping_point_z();
+    // initialise position and desired velocity
+    pos_control.set_alt_target(inertial_nav.get_altitude());
+    pos_control.set_desired_velocity_z(inertial_nav.get_velocity_z());
 
     // initialise yaw
     set_auto_yaw_mode(AUTO_YAW_HOLD);
@@ -367,14 +372,11 @@ void Copter::auto_land_start(const Vector3f& destination)
 //      called by auto_run at 100hz or more
 void Copter::auto_land_run()
 {
-    int16_t roll_control = 0, pitch_control = 0;
-    float target_yaw_rate = 0;
-
-    // if not auto armed or motor interlock not enabled set throttle to zero and exit immediately
-    if (!motors.armed() || !ap.auto_armed || ap.land_complete) {
+    // if not auto armed or landed or motor interlock not enabled set throttle to zero and exit immediately
+    if (!motors.armed() || !ap.auto_armed || ap.land_complete || !motors.get_interlock()) {
 #if FRAME_CONFIG == HELI_FRAME  // Helicopters always stabilize roll/pitch/yaw
         // call attitude controller
-        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw_smooth(0, 0, 0, get_smoothing_gain());
+        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(0, 0, 0, get_smoothing_gain());
         attitude_control.set_throttle_out(0,false,g.throttle_filt);
 #else
         motors.set_desired_spool_state(AP_Motors::DESIRED_SPIN_WHEN_ARMED);
@@ -386,53 +388,11 @@ void Copter::auto_land_run()
         return;
     }
 
-    // relax loiter targets if we might be landed
-    if (ap.land_complete_maybe) {
-        wp_nav.loiter_soften_for_landing();
-    }
-
-    // process pilot's input
-    if (!failsafe.radio) {
-        if ((g.throttle_behavior & THR_BEHAVE_HIGH_THROTTLE_CANCELS_LAND) != 0 && rc_throttle_control_in_filter.get() > LAND_CANCEL_TRIGGER_THR){
-            Log_Write_Event(DATA_LAND_CANCELLED_BY_PILOT);
-            // exit land if throttle is high
-            if (!set_mode(LOITER, MODE_REASON_THROTTLE_LAND_ESCAPE)) {
-                set_mode(ALT_HOLD, MODE_REASON_THROTTLE_LAND_ESCAPE);
-            }
-        }
-
-        if (g.land_repositioning) {
-            // apply SIMPLE mode transform to pilot inputs
-            update_simple_mode();
-
-            // process pilot's roll and pitch input
-            roll_control = channel_roll->get_control_in();
-            pitch_control = channel_pitch->get_control_in();
-        }
-
-        // get pilot's desired yaw rate
-        target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->get_control_in());
-    }
-
     // set motors to full range
     motors.set_desired_spool_state(AP_Motors::DESIRED_THROTTLE_UNLIMITED);
-
-    // process roll, pitch inputs
-    wp_nav.set_pilot_desired_acceleration(roll_control, pitch_control);
-
-    // run loiter controller
-    wp_nav.update_loiter(ekfGndSpdLimit, ekfNavVelGainScaler);
-
-    // call z-axis position controller
-    float cmb_rate = get_land_descent_speed();
-    pos_control.set_alt_target_from_climb_rate(cmb_rate, G_Dt, true);
-    pos_control.update_z_controller();
-
-    // record desired climb rate for logging
-    desired_climb_rate = cmb_rate;
-
-    // roll & pitch from waypoint controller, yaw rate from pilot
-    attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), target_yaw_rate);
+    
+    land_run_horizontal_control();
+    land_run_vertical_control();
 }
 
 // auto_rtl_start - initialises RTL in AUTO flight mode
@@ -527,7 +487,7 @@ void Copter::auto_circle_run()
     pos_control.update_z_controller();
 
     // roll & pitch from waypoint controller, yaw rate from pilot
-    attitude_control.input_euler_angle_roll_pitch_yaw(circle_nav.get_roll(), circle_nav.get_pitch(), circle_nav.get_yaw(),true);
+    attitude_control.input_euler_angle_roll_pitch_yaw(circle_nav.get_roll(), circle_nav.get_pitch(), circle_nav.get_yaw(),true, get_smoothing_gain());
 }
 
 #if NAV_GUIDED == ENABLED
@@ -586,7 +546,7 @@ void Copter::auto_loiter_run()
     if (!motors.armed() || !ap.auto_armed || ap.land_complete || !motors.get_interlock()) {
 #if FRAME_CONFIG == HELI_FRAME  // Helicopters always stabilize roll/pitch/yaw
         // call attitude controller
-        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw_smooth(0, 0, 0, get_smoothing_gain());
+        attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(0, 0, 0, get_smoothing_gain());
         attitude_control.set_throttle_out(0,false,g.throttle_filt);
 #else
         motors.set_desired_spool_state(AP_Motors::DESIRED_SPIN_WHEN_ARMED);
@@ -609,7 +569,7 @@ void Copter::auto_loiter_run()
     failsafe_terrain_set_status(wp_nav.update_wpnav());
 
     pos_control.update_z_controller();
-    attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), target_yaw_rate);
+    attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw(wp_nav.get_roll(), wp_nav.get_pitch(), target_yaw_rate, get_smoothing_gain());
 }
 
 // get_default_auto_yaw_mode - returns auto_yaw_mode based on WP_YAW_BEHAVIOR parameter

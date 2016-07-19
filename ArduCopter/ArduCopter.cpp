@@ -94,14 +94,15 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(arm_motors_check,      10,     50),
     SCHED_TASK(auto_disarm_check,     10,     50),
     SCHED_TASK(auto_trim,             10,     75),
-    SCHED_TASK(update_altitude,       10,    140),
+    SCHED_TASK(read_rangefinder,      20,    100),
+    SCHED_TASK(update_altitude,       10,    100),
     SCHED_TASK(run_nav_updates,       50,    100),
-    SCHED_TASK(update_thr_average,   100,     90),
+    SCHED_TASK(update_throttle_hover,100,     90),
     SCHED_TASK(three_hz_loop,          3,     75),
     SCHED_TASK(compass_accumulate,   100,    100),
     SCHED_TASK(barometer_accumulate,  50,     90),
 #if PRECISION_LANDING == ENABLED
-    SCHED_TASK(update_precland,       50,     50),
+    SCHED_TASK(update_precland,      400,     50),
 #endif
 #if FRAME_CONFIG == HELI_FRAME
     SCHED_TASK(check_dynamic_flight,  50,     75),
@@ -393,6 +394,9 @@ void Copter::ten_hz_logging_loop()
     if (should_log(MASK_LOG_IMU) || should_log(MASK_LOG_IMU_FAST) || should_log(MASK_LOG_IMU_RAW)) {
         DataFlash.Log_Write_Vibration(ins);
     }
+    if (should_log(MASK_LOG_CTUN)) {
+        attitude_control.control_monitor_log();
+    }
 #if FRAME_CONFIG == HELI_FRAME
     Log_Write_Heli();
 #endif
@@ -423,6 +427,11 @@ void Copter::twentyfive_hz_logging()
     if (should_log(MASK_LOG_IMU) && !should_log(MASK_LOG_IMU_RAW)) {
         DataFlash.Log_Write_IMU(ins);
     }
+#endif
+
+#if PRECISION_LANDING == ENABLED
+    // log output
+    Log_Write_Precland();
 #endif
 }
 
@@ -475,9 +484,7 @@ void Copter::one_hz_loop()
         motors.set_frame_orientation(g.frame_orientation);
 
         // set all throttle channel settings
-        motors.set_throttle_range(g.throttle_min, channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
-        // set hover throttle
-        motors.set_hover_throttle(g.throttle_mid);
+        motors.set_throttle_range(channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
 #endif
     }
 
@@ -607,14 +614,11 @@ void Copter::read_AHRS(void)
     ahrs.update();
 }
 
-// read baro and sonar altitude at 10hz
+// read baro and rangefinder altitude at 10hz
 void Copter::update_altitude()
 {
     // read in baro altitude
     read_barometer();
-
-    // read in sonar altitude
-    sonar_alt           = read_sonar();
 
     // write altitude info to dataflash logs
     if (should_log(MASK_LOG_CTUN)) {

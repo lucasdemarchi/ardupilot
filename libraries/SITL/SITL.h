@@ -25,6 +25,7 @@ struct sitl_fdm {
     double rpm2;            // secondary RPM
     uint8_t rcin_chan_count;
     float  rcin[8];         // RC input 0..1
+    Vector3f bodyMagField;  // Truth XYZ magnetic field vector in body-frame. Includes motor interference. Units are milli-Gauss.
 };
 
 // number of rc output channels
@@ -104,6 +105,8 @@ public:
     AP_Int8  terrain_enable; // enable using terrain for height
 
     // wind control
+    float wind_speed_active;
+    float wind_direction_active;
     AP_Float wind_speed;
     AP_Float wind_direction;
     AP_Float wind_turbulance;
@@ -112,6 +115,15 @@ public:
     AP_Int16  baro_delay; // barometer data delay in ms
     AP_Int16  mag_delay; // magnetometer data delay in ms
     AP_Int16  wind_delay; // windspeed data delay in ms
+
+    // ADSB related run-time options
+    AP_Int16 adsb_plane_count;
+    AP_Float adsb_radius_m;
+    AP_Float adsb_altitude_m;
+
+    // Earth magnetic field anomaly
+    AP_Vector3f mag_anomaly_ned; // NED anomaly vector at ground level (mGauss)
+    AP_Float mag_anomaly_hgt; // height above ground where anomally strength has decayed to 1/8 of the ground level value (m)
 
     void simstate_send(mavlink_channel_t chan);
 

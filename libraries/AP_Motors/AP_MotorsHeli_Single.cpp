@@ -132,6 +132,27 @@ const AP_Param::GroupInfo AP_MotorsHeli_Single::var_info[] = {
     // @Path: ../RC_Channel/RC_Channel.cpp
     AP_SUBGROUPINFO(_yaw_servo, "SV4_", 15, AP_MotorsHeli_Single, RC_Channel),
 
+    // @Param: RSC_PWM_MIN
+    // @DisplayName: RSC PWM output miniumum
+    // @Description: This sets the PWM output on RSC channel for maximum rotor speed
+    // @Range: 0 2000
+    // @User: Standard
+    AP_GROUPINFO("RSC_PWM_MIN", 16, AP_MotorsHeli_Single, _main_rotor._pwm_min, 1000),
+
+    // @Param: RSC_PWM_MAX
+    // @DisplayName: RSC PWM output maxiumum
+    // @Description: This sets the PWM output on RSC channel for miniumum rotor speed
+    // @Range: 0 2000
+    // @User: Standard
+    AP_GROUPINFO("RSC_PWM_MAX", 17, AP_MotorsHeli_Single, _main_rotor._pwm_max, 2000),
+
+    // @Param: RSC_PWM_REV
+    // @DisplayName: RSC PWM reversal
+    // @Description: This controls reversal of the RSC channel output
+    // @Values: -1:Reversed,1:Normal
+    // @User: Standard
+    AP_GROUPINFO("RSC_PWM_REV", 18, AP_MotorsHeli_Single, _main_rotor._pwm_rev, 1),
+    
     // parameters up to and including 29 are reserved for tradheli
 
     AP_GROUPEND
@@ -240,7 +261,7 @@ void AP_MotorsHeli_Single::calculate_armed_scalars()
     _main_rotor.set_runup_time(_rsc_runup_time);
     _main_rotor.set_critical_speed(_rsc_critical/1000.0f);
     _main_rotor.set_idle_output(_rsc_idle_output/1000.0f);
-    _main_rotor.set_power_output_range(_rsc_power_low/1000.0f, _rsc_power_high/1000.0f);
+    _main_rotor.set_power_output_range(_rsc_power_low/1000.0f, _rsc_power_high/1000.0f, _rsc_power_negc/1000.0f, (uint16_t)_rsc_slewrate.get());
 }
 
 
@@ -411,7 +432,13 @@ void AP_MotorsHeli_Single::move_actuators(float roll_out, float pitch_out, float
     // feed power estimate into main rotor controller
     // ToDo: include tail rotor power?
     // ToDo: add main rotor cyclic power?
-    _main_rotor.set_motor_load(fabsf(collective_out - _collective_mid_pct));
+    if (collective_out > _collective_mid_pct) {
+        // +ve motor load for +ve collective
+        _main_rotor.set_motor_load((collective_out - _collective_mid_pct) / (1.0f - _collective_mid_pct));
+    } else {
+        // -ve motor load for -ve collective
+        _main_rotor.set_motor_load((collective_out - _collective_mid_pct) / _collective_mid_pct);
+    }
 
     // swashplate servos
     float collective_scalar = ((float)(_collective_max-_collective_min))/1000.0f;

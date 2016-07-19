@@ -406,7 +406,7 @@ struct PACKED log_Arm_Disarm {
 
 void Plane::Log_Write_Current()
 {
-    DataFlash.Log_Write_Current(battery, channel_throttle->get_control_in());
+    DataFlash.Log_Write_Current(battery);
 
     // also write power status
     DataFlash.Log_Write_Power();
@@ -520,6 +520,7 @@ void Plane::Log_Write_Vehicle_Startup_Messages()
     // only 200(?) bytes are guaranteed by DataFlash
     Log_Write_Startup(TYPE_GROUNDSTART_MSG);
     DataFlash.Log_Write_Mode(control_mode);
+    DataFlash.Log_Write_Rally(rally);
 }
 
 // start a new log

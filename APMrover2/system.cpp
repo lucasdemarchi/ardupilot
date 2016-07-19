@@ -108,22 +108,15 @@ void Rover::init_ardupilot()
     // init baro before we start the GCS, so that the CLI baro test works
     barometer.init();
 
-    // init the GCS
-    gcs[0].setup_uart(serial_manager, AP_SerialManager::SerialProtocol_Console, 0);
-
     // we start by assuming USB connected, as we initialed the serial
     // port with SERIAL0_BAUD. check_usb_mux() fixes this if need be.
     usb_connected = true;
     check_usb_mux();
 
-    // setup serial port for telem1
-    gcs[1].setup_uart(serial_manager, AP_SerialManager::SerialProtocol_MAVLink, 0);
-
-    // setup serial port for telem2
-    gcs[2].setup_uart(serial_manager, AP_SerialManager::SerialProtocol_MAVLink, 1);
-
-    // setup serial port for fourth telemetry port (not used by default)
-    gcs[3].setup_uart(serial_manager, AP_SerialManager::SerialProtocol_MAVLink, 2);
+    // setup telem slots with serial ports
+    for (uint8_t i = 0; i < MAVLINK_COMM_NUM_BUFFERS; i++) {
+        gcs[i].setup_uart(serial_manager, AP_SerialManager::SerialProtocol_MAVLink, i);
+    }
 
     // setup frsky telemetry
 #if FRSKY_TELEM_ENABLED == ENABLED
@@ -156,7 +149,7 @@ void Rover::init_ardupilot()
     init_sonar();
 
     // and baro for EKF
-    init_barometer();
+    init_barometer(true);
 
     // Do GPS init
     gps.init(&DataFlash, serial_manager);
@@ -257,6 +250,9 @@ void Rover::set_reverse(bool reverse)
         return;
     }
     g.pidSpeedThrottle.reset_I();
+    steerController.reset_I();
+    nav_controller->set_reverse(reverse);
+    steerController.set_reverse(reverse);
     in_reverse = reverse;
 }
 
@@ -276,7 +272,6 @@ void Rover::set_mode(enum mode mode)
     control_mode = mode;
     throttle_last = 0;
     throttle = 500;
-    set_reverse(false);
     g.pidSpeedThrottle.reset_I();
 
     if (control_mode != AUTO) {
@@ -535,6 +530,9 @@ bool Rover::disarm_motors(void)
     }
     if (arming.arming_required() == AP_Arming::YES_ZERO_PWM) {
         channel_throttle->disable_out();
+        if (g.skid_steer_out) {
+            channel_steer->disable_out();
+        }
     }
     if (control_mode != AUTO) {
         // reset the mission on disarm if we are not in auto

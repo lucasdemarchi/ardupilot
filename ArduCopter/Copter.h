@@ -37,7 +37,6 @@
 
 // Application dependencies
 #include <GCS_MAVLink/GCS.h>
-#include <GCS_MAVLink/GCS_MAVLink.h>        // MAVLink GCS definitions
 #include <AP_SerialManager/AP_SerialManager.h>   // Serial manager library
 #include <AP_GPS/AP_GPS.h>             // ArduPilot GPS library
 #include <DataFlash/DataFlash.h>          // ArduPilot Mega Flash Memory Library
@@ -77,6 +76,7 @@
 #include <AC_WPNav/AC_Circle.h>          // circle navigation library
 #include <AP_Declination/AP_Declination.h>     // ArduPilot Mega Declination Helper Library
 #include <AC_Fence/AC_Fence.h>           // Arducopter Fence library
+#include <AC_Avoidance/AC_Avoid.h>           // Arducopter stop at fence library
 #include <AP_Scheduler/AP_Scheduler.h>       // main loop scheduler
 #include <AP_RCMapper/AP_RCMapper.h>        // RC input mapping library
 #include <AP_Notify/AP_Notify.h>          // Notify library
@@ -93,6 +93,8 @@
 // Configuration
 #include "defines.h"
 #include "config.h"
+
+#include "GCS_Mavlink.h"
 
 // libraries which are dependent on #defines in defines.h and/or config.h
 #if SPRAYER == ENABLED
@@ -118,7 +120,7 @@
 
 class Copter : public AP_HAL::HAL::Callbacks {
 public:
-    friend class GCS_MAVLINK;
+    friend class GCS_MAVLINK_Copter;
     friend class Parameters;
 
     Copter(void);
@@ -138,6 +140,7 @@ private:
 
     // Global parameters are all contained within the 'g' class.
     Parameters g;
+    ParametersG2 g2;
 
     // main loop scheduler
     AP_Scheduler scheduler;
@@ -169,17 +172,21 @@ private:
     Compass compass;
     AP_InertialSensor ins;
 
-#if CONFIG_SONAR == ENABLED
-    RangeFinder sonar {serial_manager};
-    bool sonar_enabled; // enable user switch for sonar
-#endif
+    RangeFinder rangefinder {serial_manager};
+    struct {
+        bool enabled:1;
+        bool alt_healthy:1; // true if we can trust the altitude from the rangefinder
+        int16_t alt_cm;     // tilt compensated altitude (in cm) from rangefinder
+        uint32_t last_healthy_ms;
+        LowPassFilterFloat alt_cm_filt; // altitude filter
+    } rangefinder_state = { false, false, 0, 0 };
 
     AP_RPM rpm_sensor;
 
     // Inertial Navigation EKF
-    NavEKF EKF{&ahrs, barometer, sonar};
-    NavEKF2 EKF2{&ahrs, barometer, sonar};
-    AP_AHRS_NavEKF ahrs{ins, barometer, gps, sonar, EKF, EKF2, AP_AHRS_NavEKF::FLAG_ALWAYS_USE_EKF};
+    NavEKF EKF{&ahrs, barometer, rangefinder};
+    NavEKF2 EKF2{&ahrs, barometer, rangefinder};
+    AP_AHRS_NavEKF ahrs{ins, barometer, gps, rangefinder, EKF, EKF2, AP_AHRS_NavEKF::FLAG_ALWAYS_USE_EKF};
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     SITL::SITL sitl;
@@ -206,7 +213,7 @@ private:
     AP_SerialManager serial_manager;
     static const uint8_t num_gcs = MAVLINK_COMM_NUM_BUFFERS;
 
-    GCS_MAVLINK gcs[MAVLINK_COMM_NUM_BUFFERS];
+    GCS_MAVLINK_Copter gcs[MAVLINK_COMM_NUM_BUFFERS];
 
     // User variables
 #ifdef USERHOOK_VARIABLES
@@ -263,6 +270,11 @@ private:
         uint32_t start_ms;
     } takeoff_state;
 
+    uint32_t precland_last_update_ms;
+
+    // altitude below which we do no navigation in auto takeoff
+    float auto_takeoff_no_nav_alt_cm;
+    
     RCMapper rcmap;
 
     // board specific config
@@ -368,7 +380,6 @@ private:
     int32_t initial_armed_bearing;
 
     // Throttle variables
-    float throttle_average;              // estimated throttle required to hover
     int16_t desired_climb_rate;          // pilot desired climb rate - for logging purposes only
 
     // Loiter control
@@ -403,10 +414,7 @@ private:
     // Altitude
     // The cm/s we are moving up or down based on filtered data - Positive = UP
     int16_t climb_rate;
-    // The altitude as reported by Sonar in cm - Values are 20 to 700 generally.
-    int16_t sonar_alt;
-    uint8_t sonar_alt_health;    // true if we can trust the altitude from the sonar
-    float target_sonar_alt;      // desired altitude in cm above the ground
+    float target_rangefinder_alt;   // desired altitude in cm above the ground
     int32_t baro_alt;            // barometer altitude in cm above home
     float baro_climbrate;        // barometer climbrate in cm/s
     LowPassFilterVector3f land_accel_ef_filter; // accelerations for land and crash detector tests
@@ -457,6 +465,7 @@ private:
     AC_AttitudeControl_Multi attitude_control;
 #endif
     AC_PosControl pos_control;
+    AC_Avoid avoid;
     AC_WPNav wp_nav;
     AC_Circle circle_nav;
 
@@ -563,6 +572,8 @@ private:
         uint8_t dynamic_flight          : 1;    // 0   // true if we are moving at a significant speed (used to turn on/off leaky I terms)
         uint8_t init_targets_on_arming  : 1;    // 1   // true if we have been disarmed, and need to reset rate controller targets when we arm
     } heli_flags;
+
+    int16_t hover_roll_trim_scalar_slew;
 #endif
 
 #if GNDEFFECT_COMPENSATION == ENABLED
@@ -618,7 +629,7 @@ private:
     void check_ekf_yaw_reset();
     float get_roi_yaw();
     float get_look_ahead_yaw();
-    void update_thr_average();
+    void update_throttle_hover();
     void set_throttle_takeoff();
     float get_pilot_desired_throttle(int16_t throttle_control);
     float get_pilot_desired_climb_rate(float throttle_control);
@@ -626,6 +637,8 @@ private:
     float get_takeoff_trigger_throttle();
     float get_throttle_pre_takeoff(float input_thr);
     float get_surface_tracking_climb_rate(int16_t target_rate, float current_alt_target, float dt);
+    void auto_takeoff_set_start_alt(void);
+    void auto_takeoff_attitude_run(float target_yaw_rate);
     void set_accel_throttle_I_from_pilot_throttle(float pilot_throttle);
     void update_poscon_alt_max();
     void rotate_body_frame_to_NE(float &x, float &y);
@@ -647,7 +660,6 @@ private:
     void send_rpm(mavlink_channel_t chan);
     void rpm_update();
     void send_pid_tuning(mavlink_channel_t chan);
-    bool telemetry_delayed(mavlink_channel_t chan);
     void gcs_send_message(enum ap_message id);
     void gcs_send_mission_item_reached_message(uint16_t mission_index);
     void gcs_data_stream_send(void);
@@ -663,7 +675,6 @@ private:
     void Log_Write_Performance();
     void Log_Write_Attitude();
     void Log_Write_MotBatt();
-    void Log_Write_Startup();
     void Log_Write_Event(uint8_t id);
     void Log_Write_Data(uint8_t id, int32_t value);
     void Log_Write_Data(uint8_t id, uint32_t value);
@@ -783,7 +794,7 @@ private:
     void guided_vel_control_start();
     void guided_posvel_control_start();
     void guided_angle_control_start();
-    void guided_set_destination(const Vector3f& destination);
+    bool guided_set_destination(const Vector3f& destination);
     bool guided_set_destination(const Location_Class& dest_loc);
     void guided_set_velocity(const Vector3f& velocity);
     void guided_set_destination_posvel(const Vector3f& destination, const Vector3f& velocity);
@@ -802,7 +813,8 @@ private:
     void land_run();
     void land_gps_run();
     void land_nogps_run();
-    float get_land_descent_speed();
+    void land_run_vertical_control(bool pause_descent = false);
+    void land_run_horizontal_control();
     void land_do_not_use_GPS();
     void set_mode_land_with_pause(mode_reason_t reason);
     bool landing_with_GPS();
@@ -910,7 +922,8 @@ private:
     void pre_arm_rc_checks();
     bool pre_arm_gps_checks(bool display_failure);
     bool pre_arm_ekf_attitude_check();
-    bool pre_arm_terrain_check();
+    bool pre_arm_rallypoint_check();
+    bool pre_arm_terrain_check(bool display_failure);
     bool arm_checks(bool display_failure, bool arming_from_gcs);
     void init_disarm_motors();
     void motors_output();
@@ -930,11 +943,11 @@ private:
     uint16_t perf_info_get_num_long_running();
     uint32_t perf_info_get_num_dropped();
     Vector3f pv_location_to_vector(const Location& loc);
-    Vector3f pv_location_to_vector_with_default(const Location& loc, const Vector3f& default_posvec);
     float pv_alt_above_origin(float alt_above_home_cm);
     float pv_alt_above_home(float alt_above_origin_cm);
     float pv_get_bearing_cd(const Vector3f &origin, const Vector3f &destination);
     float pv_get_horizontal_distance_cm(const Vector3f &origin, const Vector3f &destination);
+    float pv_distance_to_home_cm(const Vector3f &destination);
     void default_dead_zones();
     void init_rc_in();
     void init_rc_out();
@@ -945,8 +958,9 @@ private:
     void radio_passthrough_to_motors();
     void init_barometer(bool full_calibration);
     void read_barometer(void);
-    void init_sonar(void);
-    int16_t read_sonar(void);
+    void init_rangefinder(void);
+    void read_rangefinder(void);
+    bool rangefinder_alt_ok();
     void init_compass();
     void init_optflow();
     void update_optical_flow(void);
@@ -1075,7 +1089,7 @@ public:
     int8_t test_optflow(uint8_t argc, const Menu::arg *argv);
     int8_t test_relay(uint8_t argc, const Menu::arg *argv);
     int8_t test_shell(uint8_t argc, const Menu::arg *argv);
-    int8_t test_sonar(uint8_t argc, const Menu::arg *argv);
+    int8_t test_rangefinder(uint8_t argc, const Menu::arg *argv);
 
     int8_t reboot_board(uint8_t argc, const Menu::arg *argv);
 };

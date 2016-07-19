@@ -27,6 +27,8 @@
 #include "UARTQFlight.h"
 #include "UDPDevice.h"
 
+#include <GCS_MAVLink/GCS.h>
+
 extern const AP_HAL::HAL& hal;
 
 using namespace Linux;
@@ -34,11 +36,9 @@ using namespace Linux;
 UARTDriver::UARTDriver(bool default_console) :
     device_path(NULL),
     _packetise(false),
-    _flow_control(FLOW_CONTROL_DISABLE)
+    _device{new ConsoleDevice()}
 {
     if (default_console) {
-        _device = new ConsoleDevice();
-        _device->open();
         _console = true;
     }
 }
@@ -61,61 +61,30 @@ void UARTDriver::begin(uint32_t b)
 
 void UARTDriver::begin(uint32_t b, uint16_t rxS, uint16_t txS)
 {
-    if (device_path == NULL && _console) {
-        _device = new ConsoleDevice();
-        _device->open();
-        _device->set_blocking(false);
-    } else if (!_initialised) {
-        if (device_path == NULL) {
-            return;
-        }
-
-        switch (_parseDevicePath(device_path)) {
-        case DEVICE_TCP:
-        {
-            _tcp_start_connection();
-            _flow_control = FLOW_CONTROL_ENABLE;
-            break;
-        }
-
-        case DEVICE_UDP:
-        {
-            _udp_start_connection();
-            _flow_control = FLOW_CONTROL_ENABLE;
-            break;
-        }
-
-#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_QFLIGHT
-        case DEVICE_QFLIGHT:
-        {
-            _qflight_start_connection();
-            _flow_control = FLOW_CONTROL_DISABLE;
-            break;
-        }
-#endif
-
-        case DEVICE_SERIAL:
-        {
-            if (!_serial_start_connection()) {
-                break; /* Whatever it might mean */
-            }
-            break;
-        }
-        default:
-        {
-            // Notify that the option is not valid and select standart input and output
-            ::printf("Argument is not valid. Fallback to console.\n");
-            ::printf("Launch with --help to see an example.\n");
-
+    if (!_initialised) {
+        if (device_path == NULL && _console) {
             _device = new ConsoleDevice();
-            _device->open();
-            _device->set_blocking(false);
-            break;
-        }
+        } else {
+            if (device_path == NULL) {
+                return;
+            }
+
+            _device = _parseDevicePath(device_path);
+
+            if (!_device.get()) {
+                ::fprintf(stderr, "Argument is not valid. Fallback to console.\n"
+                          "Launch with --help to see an example.\n");
+                _device = new ConsoleDevice();
+            }
         }
     }
 
+    if (!_connected) {
+        _connected = _device->open();
+        _device->set_blocking(false);
+    }
     _initialised = false;
+
     while (_in_timer) hal.scheduler->delay(1);
 
     _device->set_speed(b);
@@ -193,24 +162,26 @@ void UARTDriver::_deallocate_buffers()
         - tcp:*:1243:wait
         - udp:192.168.2.15:1243
 */
-UARTDriver::device_type UARTDriver::_parseDevicePath(const char *arg)
+AP_HAL::OwnPtr<SerialDevice> UARTDriver::_parseDevicePath(const char *arg)
 {
     struct stat st;
 
     if (stat(arg, &st) == 0 && S_ISCHR(st.st_mode)) {
-        return DEVICE_SERIAL;
+        return AP_HAL::OwnPtr<SerialDevice>(new UARTDevice(arg));
 #if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_QFLIGHT
     } else if (strncmp(arg, "qflight:", 8) == 0) {
-        return DEVICE_QFLIGHT;
+        return AP_HAL::OwnPtr<SerialDevice>(new QFLIGHTDevice(device_path));
 #endif
     } else if (strncmp(arg, "tcp:", 4) != 0 &&
-               strncmp(arg, "udp:", 4) != 0) {
-        return DEVICE_UNKNOWN;
+               strncmp(arg, "udp:", 4) != 0 &&
+               strncmp(arg, "udpin:", 6)) {
+        return nullptr;
     }
 
     char *devstr = strdup(arg);
+
     if (devstr == NULL) {
-        return DEVICE_UNKNOWN;
+        return nullptr;
     }
 
     char *saveptr = NULL;
@@ -221,12 +192,9 @@ UARTDriver::device_type UARTDriver::_parseDevicePath(const char *arg)
     port = strtok_r(NULL, ":", &saveptr);
     flag = strtok_r(NULL, ":", &saveptr);
 
-    device_type type = DEVICE_UNKNOWN;
-
     if (ip == NULL || port == NULL) {
-        fprintf(stderr, "IP or port is set incorrectly.\n");
-        type = DEVICE_UNKNOWN;
-        goto errout;
+        free(devstr);
+        return nullptr;
     }
 
     if (_ip) {
@@ -247,60 +215,27 @@ UARTDriver::device_type UARTDriver::_parseDevicePath(const char *arg)
         _flag = strdup(flag);
     }
 
-    if (strcmp(protocol, "udp") == 0) {
-        type = DEVICE_UDP;
+    AP_HAL::OwnPtr<SerialDevice> device = nullptr;
+
+    if (strcmp(protocol, "udp") == 0 || strcmp(protocol, "udpin") == 0) {
+        bool bcast = (_flag && strcmp(_flag, "bcast") == 0);
+        _packetise = true;
+        if (strcmp(protocol, "udp") == 0) {
+            device = new UDPDevice(_ip, _base_port, bcast, false);
+        } else {
+            if (bcast) {
+                AP_HAL::panic("Can't combine udpin with bcast");
+            }
+            device = new UDPDevice(_ip, _base_port, false, true);
+
+        }
     } else {
-        type = DEVICE_TCP;
+        bool wait = (_flag && strcmp(_flag, "wait") == 0);
+        device = new TCPServerDevice(_ip, _base_port, wait);
     }
 
-errout:
-
     free(devstr);
-    return type;
-}
-
-
-bool UARTDriver::_serial_start_connection()
-{
-    _device = new UARTDevice(device_path);
-    _connected = _device->open();
-    _device->set_blocking(false);
-    _flow_control = FLOW_CONTROL_DISABLE;
-
-    return true;
-}
-
-#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_QFLIGHT
-bool UARTDriver::_qflight_start_connection()
-{
-    _device = new QFLIGHTDevice(device_path);
-    _connected = _device->open();
-    _flow_control = FLOW_CONTROL_DISABLE;
-
-    return true;
-}
-#endif
-
-/*
-  start a UDP connection for the serial port
- */
-void UARTDriver::_udp_start_connection(void)
-{
-    bool bcast = (_flag && strcmp(_flag, "bcast") == 0);
-    _device = new UDPDevice(_ip, _base_port, bcast);
-    _connected = _device->open();
-    _device->set_blocking(false);
-
-    /* try to write on MAVLink packet boundaries if possible */
-    _packetise = true;
-}
-
-void UARTDriver::_tcp_start_connection(void)
-{
-    bool wait = (_flag && strcmp(_flag, "wait") == 0);
-    _device = new TCPServerDevice(_ip, _base_port, wait);
-
-    _connected = _device->open();
+    return device;
 }
 
 /*
@@ -518,7 +453,9 @@ bool UARTDriver::_write_pending_bytes(void)
     uint16_t _tail;
     uint16_t available_bytes = BUF_AVAILABLE(_writebuf);
     n = available_bytes;
-    if (_packetise && n > 0 && _writebuf[_writebuf_head] != 254) {
+    if (_packetise && n > 0 &&
+        (_writebuf[_writebuf_head] != MAVLINK_STX_MAVLINK1 &&
+         _writebuf[_writebuf_head] != MAVLINK_STX)) {
         /*
           we have a non-mavlink packet at the start of the
           buffer. Look ahead for a MAVLink start byte, up to 256 bytes
@@ -527,7 +464,8 @@ bool UARTDriver::_write_pending_bytes(void)
         uint16_t limit = n>256?256:n;
         uint16_t i;
         for (i=0; i<limit; i++) {
-            if (_writebuf[(_writebuf_head + i) % _writebuf_size] == 254) {
+            uint8_t b = _writebuf[(_writebuf_head + i) % _writebuf_size];
+            if (b == MAVLINK_STX_MAVLINK1 || b == MAVLINK_STX) {
                 n = i;
                 break;
             }
@@ -537,24 +475,34 @@ bool UARTDriver::_write_pending_bytes(void)
             n = limit;
         }
     }
-    if (_packetise && n > 0 && _writebuf[_writebuf_head] == 254) {
+    const uint8_t b = _writebuf[_writebuf_head];
+    if (_packetise && n > 0 &&
+        (b == MAVLINK_STX_MAVLINK1 || b == MAVLINK_STX)) {
+        uint8_t min_length = (b == MAVLINK_STX_MAVLINK1)?8:12;
         // this looks like a MAVLink packet - try to write on
         // packet boundaries when possible
-        if (n < 8) {
+        if (n < min_length) {
+            // we need to wait for more data to arrive
             n = 0;
         } else {
             // the length of the packet is the 2nd byte, and mavlink
             // packets have a 6 byte header plus 2 byte checksum,
             // giving len+8 bytes
-            uint16_t ofs = (_writebuf_head + 1) % _writebuf_size;
-            uint8_t len = _writebuf[ofs];
-            if (n < len+8) {
+            uint8_t len = _writebuf[(_writebuf_head + 1) % _writebuf_size];
+            if (b == MAVLINK_STX) {
+                // check for signed packet with extra 13 bytes
+                uint8_t incompat_flags = _writebuf[(_writebuf_head + 2) % _writebuf_size];
+                if (incompat_flags & MAVLINK_IFLAG_SIGNED) {
+                    min_length += MAVLINK_SIGNATURE_BLOCK_LEN;
+                }
+            }
+            if (n < len+min_length) {
                 // we don't have a full packet yet
                 n = 0;
-            } else if (n > len+8) {
+            } else if (n > len+min_length) {
                 // send just 1 packet at a time (so MAVLink packets
                 // are aligned on UDP boundaries)
-                n = len+8;
+                n = len+min_length;
             }
         }
     }

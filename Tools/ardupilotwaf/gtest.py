@@ -11,7 +11,11 @@ from waflib.Configure import conf
 import boards
 
 def configure(cfg):
-    board = boards.get_board(cfg.env.BOARD)
+    cfg.env.HAS_GTEST = False
+    if cfg.options.disable_tests:
+        return
+
+    board = cfg.get_board()
     if isinstance(board, boards.px4):
         # toolchain is currently broken for gtest
         cfg.msg(
@@ -20,8 +24,6 @@ def configure(cfg):
             color='YELLOW',
         )
         return
-
-    cfg.env.HAS_GTEST = False
 
     if cfg.env.STATIC_LINKING:
         # gtest uses a function (getaddrinfo) that is supposed to be linked

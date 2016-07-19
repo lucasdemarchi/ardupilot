@@ -23,6 +23,7 @@
 #include "AP_AHRS.h"
 #include <AP_Vehicle/AP_Vehicle.h>
 #include <GCS_MAVLink/GCS.h>
+#include <AP_Module/AP_Module.h>
 
 #if AP_AHRS_NAVEKF_AVAILABLE
 
@@ -91,6 +92,9 @@ void AP_AHRS_NavEKF::update(void)
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     update_SITL();
 #endif
+
+    // call AHRS_update hook if any
+    AP_Module::call_hook_AHRS_update(*this);
 }
 
 void AP_AHRS_NavEKF::update_DCM(void)
@@ -739,7 +743,7 @@ AP_AHRS_NavEKF::EKF_TYPE AP_AHRS_NavEKF::active_EKF_type(void) const
             return EKF_TYPE_NONE;
         }
         if (always_use_EKF()) {
-            uint8_t ekf_faults;
+            uint16_t ekf_faults;
             EKF1.getFilterFaults(ekf_faults);
             if (ekf_faults == 0) {
                 ret = EKF_TYPE1;
@@ -757,7 +761,7 @@ AP_AHRS_NavEKF::EKF_TYPE AP_AHRS_NavEKF::active_EKF_type(void) const
             return EKF_TYPE_NONE;
         }
         if (always_use_EKF()) {
-            uint8_t ekf2_faults;
+            uint16_t ekf2_faults;
             EKF2.getFilterFaults(-1,ekf2_faults);
             if (ekf2_faults == 0) {
                 ret = EKF_TYPE2;
@@ -807,10 +811,26 @@ AP_AHRS_NavEKF::EKF_TYPE AP_AHRS_NavEKF::active_EKF_type(void) const
             return EKF_TYPE_NONE;
         }
         if (!filt_state.flags.attitude ||
-                !filt_state.flags.horiz_vel ||
-                !filt_state.flags.vert_vel ||
-                !filt_state.flags.horiz_pos_abs ||
-                !filt_state.flags.vert_pos) {
+            !filt_state.flags.vert_vel ||
+            !filt_state.flags.vert_pos) {
+            return EKF_TYPE_NONE;
+        }
+        if (!filt_state.flags.horiz_vel ||
+            !filt_state.flags.horiz_pos_abs) {
+            if ((!_compass || !_compass->use_for_yaw()) &&
+                _gps.status() >= AP_GPS::GPS_OK_FIX_3D &&
+                _gps.ground_speed() < 2) {
+                /*
+                  special handling for non-compass mode when sitting
+                  still. The EKF may not yet have aligned its yaw. We
+                  accept EKF as healthy to allow arming. Once we reach
+                  speed the EKF should get yaw alignment
+                */
+                if (filt_state.flags.pred_horiz_pos_abs &&
+                    filt_state.flags.pred_horiz_pos_rel) {
+                    return ret;
+                }
+            }
             return EKF_TYPE_NONE;
         }
     }
@@ -1101,6 +1121,13 @@ void AP_AHRS_NavEKF::send_ekf_status_report(mavlink_channel_t chan)
         return EKF1.send_status_report(chan);
 #endif
 
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    case EKF_TYPE_SITL:
+        // send zero status report
+        mavlink_msg_ekf_status_report_send(chan, 0, 0, 0, 0, 0, 0);
+        break;
+#endif
+        
     case EKF_TYPE2:
     default:
         return EKF2.send_status_report(chan);

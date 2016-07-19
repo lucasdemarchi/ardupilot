@@ -44,10 +44,10 @@ void Copter::check_dynamic_flight(void)
         moving = (motors.get_throttle() > 0.8f || ahrs.pitch_sensor < -1500);
     }
 
-    if (!moving && sonar_enabled && sonar.status() == RangeFinder::RangeFinder_Good) {
+    if (!moving && rangefinder_state.enabled && rangefinder.status() == RangeFinder::RangeFinder_Good) {
         // when we are more than 2m from the ground with good
         // rangefinder lock consider it to be dynamic flight
-        moving = (sonar.distance_cm() > 200);
+        moving = (rangefinder.distance_cm() > 200);
     }
     
     if (moving) {
@@ -75,8 +75,6 @@ void Copter::check_dynamic_flight(void)
 // should be run between the rate controller and the servo updates.
 void Copter::update_heli_control_dynamics(void)
 {
-    static int16_t hover_roll_trim_scalar_slew = 0;
-
     // Use Leaky_I if we are not moving fast
     attitude_control.use_leaky_i(!heli_flags.dynamic_flight);
 
@@ -87,10 +85,10 @@ void Copter::update_heli_control_dynamics(void)
         // if we are not landed and motor power is demanded, increment slew scalar
         hover_roll_trim_scalar_slew++;
     }
-    hover_roll_trim_scalar_slew = constrain_int16(hover_roll_trim_scalar_slew, 0, MAIN_LOOP_RATE);
+    hover_roll_trim_scalar_slew = constrain_int16(hover_roll_trim_scalar_slew, 0, scheduler.get_loop_rate_hz());
 
     // set hover roll trim scalar, will ramp from 0 to 1 over 1 second after we think helicopter has taken off
-    attitude_control.set_hover_roll_trim_scalar((float)(hover_roll_trim_scalar_slew/MAIN_LOOP_RATE));
+    attitude_control.set_hover_roll_trim_scalar((float)(hover_roll_trim_scalar_slew/scheduler.get_loop_rate_hz()));
 }
 
 // heli_update_landing_swash - sets swash plate flag so higher minimum is used when landed or landing
@@ -143,7 +141,7 @@ void Copter::heli_update_rotor_speed_targets()
     // get rotor control method
     uint8_t rsc_control_mode = motors.get_rsc_mode();
 
-    float rsc_control_deglitched = rotor_speed_deglitch_filter.apply((float)g.rc_8.get_control_in()/1000.0f);
+    float rsc_control_deglitched = rotor_speed_deglitch_filter.apply((float)g.rc_8.get_control_in()) * 0.001f;
 
     switch (rsc_control_mode) {
         case ROTOR_CONTROL_MODE_SPEED_PASSTHROUGH:

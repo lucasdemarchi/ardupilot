@@ -56,7 +56,6 @@
 #include <APM_OBC/APM_OBC.h>
 #include <APM_Control/APM_Control.h>
 #include <APM_Control/AP_AutoTune.h>
-#include <GCS_MAVLink/GCS.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>    // MAVLink GCS definitions
 #include <AP_SerialManager/AP_SerialManager.h>   // Serial manager library
 #include <AP_Mount/AP_Mount.h>           // Camera/Antenna mount
@@ -90,6 +89,7 @@
 #include <AP_Parachute/AP_Parachute.h>
 #include <AP_ADSB/AP_ADSB.h>
 
+#include "GCS_Mavlink.h"
 #include "quadplane.h"
 #include "tuning.h"
 
@@ -129,7 +129,7 @@ protected:
  */
 class Plane : public AP_HAL::HAL::Callbacks {
 public:
-    friend class GCS_MAVLINK;
+    friend class GCS_MAVLINK_Plane;
     friend class Parameters;
     friend class AP_Arming_Plane;
     friend class QuadPlane;
@@ -254,7 +254,7 @@ private:
     // GCS selection
     AP_SerialManager serial_manager;
     const uint8_t num_gcs = MAVLINK_COMM_NUM_BUFFERS;
-    GCS_MAVLINK gcs[MAVLINK_COMM_NUM_BUFFERS];
+    GCS_MAVLINK_Plane gcs[MAVLINK_COMM_NUM_BUFFERS];
 
     // selected navigation controller
     AP_Navigation *nav_controller = &L1_controller;
@@ -439,6 +439,9 @@ private:
         // Flag to indicate if we have triggered pre-flare. This occurs when we have reached LAND_PF_ALT
         bool land_pre_flare:1;
 
+        // are we in auto and flight mode is approach || pre-flare || final (flare)
+        bool land_in_progress:1;
+
         // should we fly inverted?
         bool inverted_flight:1;
 
@@ -524,6 +527,17 @@ private:
     } auto_state;
 
     struct {
+        // roll pitch yaw commanded from external controller in centidegrees
+        Vector3l forced_rpy_cd;
+        // last time we heard from the external controller
+        Vector3l last_forced_rpy_ms;
+
+        // throttle  commanded from external controller in percent
+        float forced_throttle;
+        uint32_t last_forced_throttle_ms;
+} guided_state;
+
+    struct {
         // on hard landings, only check once after directly a landing so you
         // don't trigger a crash when picking up the aircraft
         bool checkedHardLanding:1;
@@ -546,11 +560,15 @@ private:
 
     // true if we are in an auto-throttle mode, which means
     // we need to run the speed/height controller
-    bool auto_throttle_mode;
+    bool auto_throttle_mode:1;
 
+    // true if we are in an auto-navigation mode, which controls whether control input is ignored
+    // with STICK_MIXING=0
+    bool auto_navigation_mode:1;
+    
     // this controls throttle suppression in auto modes
-    bool throttle_suppressed;
-
+    bool throttle_suppressed:1;
+	
     // reduce throttle to eliminate battery over-current
     int8_t  throttle_watt_limit_max;
     int8_t  throttle_watt_limit_min; // for reverse thrust
@@ -766,7 +784,6 @@ private:
     int32_t last_mixer_crc = -1;
 #endif // CONFIG_HAL_BOARD
     
-    void demo_servos(uint8_t i);
     void adjust_nav_pitch_throttle(void);
     void update_load_factor(void);
     void send_heartbeat(mavlink_channel_t chan);
@@ -823,7 +840,7 @@ private:
     int32_t get_RTL_altitude();
     float relative_altitude(void);
     int32_t relative_altitude_abs_cm(void);
-    float relative_ground_altitude(void);
+    float relative_ground_altitude(bool use_rangefinder_if_available);
     void set_target_altitude_current(void);
     void set_target_altitude_current_adjusted(void);
     void set_target_altitude_location(const Location &loc);
@@ -915,14 +932,15 @@ private:
     bool setup_failsafe_mixing(void);
     void set_control_channels(void);
     void init_rc_in();
-    void init_rc_out();
+    void init_rc_out_main();
+    void init_rc_out_aux();
     void rudder_arm_disarm_check();
     void read_radio();
     void control_failsafe(uint16_t pwm);
     void trim_control_surfaces();
     void trim_radio();
     bool rc_failsafe_active(void);
-    void init_barometer(void);
+    void init_barometer(bool full_calibration);
     void init_rangefinder(void);
     void read_rangefinder(void);
     void read_airspeed(void);

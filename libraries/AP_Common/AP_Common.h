@@ -44,6 +44,12 @@
 #define ToRad(x) radians(x)	// *pi/180
 #define ToDeg(x) degrees(x)	// *180/pi
 
+/* Declare and implement const and non-const versions of the array subscript
+ * operator. The object is treated as an array of type_ values. */
+#define DEFINE_BYTE_ARRAY_METHODS                                                                   \
+    inline uint8_t &operator[](size_t i) { return reinterpret_cast<uint8_t *>(this)[i]; }           \
+    inline uint8_t operator[](size_t i) const { return reinterpret_cast<const uint8_t *>(this)[i]; }
+
 #define LOCATION_ALT_MAX_M  83000   // maximum altitude (in meters) that can be fit into Location structure's alt field
 
 /*
@@ -63,6 +69,27 @@ template <typename T>
 char (&_ARRAY_SIZE_HELPER(T (&_arr)[0]))[0];
 
 #define ARRAY_SIZE(_arr) sizeof(_ARRAY_SIZE_HELPER(_arr))
+
+/*
+ * See UNUSED_RESULT. The difference is that it receives @uniq_ as the name to
+ * be used for its internal variable.
+ *
+ * @uniq_: a unique name to use for variable name
+ * @expr_: the expression to be evaluated
+ */
+#define _UNUSED_RESULT(uniq_, expr_)                      \
+    do {                                                  \
+        decltype(expr_) uniq_ __attribute__((unused));    \
+        uniq_ = expr_;                                    \
+    } while (0)
+
+/*
+ * Allow to call a function annotated with warn_unused_result attribute
+ * without getting a warning, because sometimes this is what we want to do.
+ *
+ * @expr_: the expression to be evaluated
+ */
+#define UNUSED_RESULT(expr_) _UNUSED_RESULT(__unique_name_##__COUNTER__, expr_)
 
 // @}
 
@@ -131,7 +158,6 @@ enum HomeState {
 #define AP_PRODUCT_ID_PX4               0x04    // PX4 on NuttX
 #define AP_PRODUCT_ID_PX4_V2            0x05    // PX4 FMU2 on NuttX
 #define AP_PRODUCT_ID_PX4_V4            0x06    // PX4 FMU4 on NuttX
-#define AP_PRODUCT_ID_FLYMAPLE          0x100   // Flymaple with ITG3205, ADXL345, HMC5883, BMP085
 #define AP_PRODUCT_ID_L3G4200D          0x101   // Linux with L3G4200D and ADXL345
 #define AP_PRODUCT_ID_PIXHAWK_FIRE_CAPE 0x102   // Linux with the PixHawk Fire Cape
 #define AP_PRODUCT_ID_MPU9250           0x103   // MPU9250
@@ -145,5 +171,14 @@ bool is_bounded_int32(int32_t value, int32_t lower_bound, int32_t upper_bound);
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_QURT
 #include <AP_HAL_QURT/replace.h>
+#endif
+
+/*
+  useful debugging macro for SITL
+ */
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+#define SITL_printf(fmt, args ...) do { ::printf("%s(%u): " fmt, __FILE__, __LINE__, ##args); } while(0)
+#else
+#define SITL_printf(fmt, args ...)
 #endif
 

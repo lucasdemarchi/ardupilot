@@ -24,6 +24,12 @@ extern const AP_HAL::HAL& hal;
 */
 bool NavEKF2_core::calcGpsGoodToAlign(void)
 {
+    if (inFlight && assume_zero_sideslip() && !use_compass()) {
+        // this is a special case where a plane has launched without magnetometer
+        // is now in the air and needs to align yaw to the GPS and start navigating as soon as possible
+        return true;
+    }
+
     // User defined multiplier to be applied to check thresholds
     float checkScaler = 0.01f*(float)frontend->_gpsCheckScaler;
 
@@ -33,10 +39,8 @@ bool NavEKF2_core::calcGpsGoodToAlign(void)
         magYawResetTimer_ms = imuSampleTime_ms;
     }
     if (imuSampleTime_ms - magYawResetTimer_ms > 5000) {
-        // reset heading and field states
-        Vector3f eulerAngles;
-        getEulerAngles(eulerAngles);
-        stateStruct.quat = calcQuatAndFieldStates(eulerAngles.x, eulerAngles.y);
+        // request reset of heading and magnetic field states
+        magYawResetRequest = true;
         // reset timer to ensure that bad magnetometer data cannot cause a heading reset more often than every 5 seconds
         magYawResetTimer_ms = imuSampleTime_ms;
     }
@@ -180,7 +184,7 @@ bool NavEKF2_core::calcGpsGoodToAlign(void)
     // fail if magnetometer innovations are outside limits indicating bad yaw
     // with bad yaw we are unable to use GPS
     bool yawFail;
-    if ((magTestRatio.x > 1.0f || magTestRatio.y > 1.0f) && (frontend->_gpsCheck & MASK_GPS_YAW_ERR)) {
+    if ((magTestRatio.x > 1.0f || magTestRatio.y > 1.0f || yawTestRatio > 1.0f) && (frontend->_gpsCheck & MASK_GPS_YAW_ERR)) {
         yawFail = true;
     } else {
         yawFail = false;
@@ -356,11 +360,18 @@ void NavEKF2_core::detectFlight()
     prevInFlight = inFlight;
 
     // Store vehicle height and range prior to takeoff for use in post takeoff checks
-    if (onGround && prevOnGround) {
+    if (onGround) {
         // store vertical position at start of flight to use as a reference for ground relative checks
         posDownAtTakeoff = stateStruct.position.z;
         // store the range finder measurement which will be used as a reference to detect when we have taken off
         rngAtStartOfFlight = rangeDataNew.rng;
+        // if the magnetic field states have been set, then continue to update the vertical position
+        // quaternion and yaw innovation snapshots to use as a reference when we start to fly.
+        if (magStateInitComplete) {
+            posDownAtLastMagReset = stateStruct.position.z;
+            quatAtLastMagReset = stateStruct.quat;
+            yawInnovAtLastMagReset = innovYaw;
+        }
     }
 
 }

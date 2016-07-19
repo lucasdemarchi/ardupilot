@@ -7,6 +7,7 @@
 #include <AP_HAL/utility/getopt_cpp.h>
 #include <AP_HAL_Empty/AP_HAL_Empty.h>
 #include <AP_HAL_Empty/AP_HAL_Empty_Private.h>
+#include <AP_Module/AP_Module.h>
 
 #include "AP_HAL_Linux_Private.h"
 #include "HAL_Linux_Class.h"
@@ -51,11 +52,13 @@ static I2CDriver i2cDriver2(2);
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BBBMINI
 static I2CDriver i2cDriver0(2);
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
-static I2CDriver  i2cDriver0({
+static const std::vector<const char *> i2c_devpaths({
     /* UEFI with lpss set to ACPI */
     "platform/80860F41:05",
     /* UEFI with lpss set to PCI */
-    "pci0000:00/0000:00:18.6" });
+    "pci0000:00/0000:00:18.6",
+});
+static I2CDriver i2cDriver0(i2c_devpaths);
 /* One additional emulated bus */
 static I2CDriver  i2cDriver1(10);
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_QFLIGHT
@@ -156,11 +159,9 @@ static RCOutput_AioPRU rcoutDriver;
  */
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO || CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_ERLEBRAIN2  || \
       CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_PXFMINI
-static RCOutput_PCA9685 rcoutDriver(PCA9685_PRIMARY_ADDRESS, true, 3, RPI_GPIO_27);
+static RCOutput_PCA9685 rcoutDriver(i2c_mgr_instance.get_device(1, PCA9685_PRIMARY_ADDRESS), true, 3, RPI_GPIO_27);
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BH
-static RCOutput_PCA9685 rcoutDriver(PCA9685_QUATENARY_ADDRESS, false, 0, RPI_GPIO_4);
-#elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO || CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_ERLEBRAIN2
-static RCOutput_PCA9685 rcoutDriver(PCA9685_PRIMARY_ADDRESS, true, 3, RPI_GPIO_27);
+static RCOutput_PCA9685 rcoutDriver(i2c_mgr_instance.get_device(1, PCA9685_QUATENARY_ADDRESS), false, 0, RPI_GPIO_4);
 /*
  use the STM32 based RCOutput driver on Raspilot
  */
@@ -169,9 +170,9 @@ static RCOutput_Raspilot rcoutDriver;
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_ZYNQ
 static RCOutput_ZYNQ rcoutDriver;
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP
-static RCOutput_Bebop rcoutDriver;
+static RCOutput_Bebop rcoutDriver(i2c_mgr_instance.get_device(HAL_RCOUT_BEBOP_BLDC_I2C_BUS, HAL_RCOUT_BEBOP_BLDC_I2C_ADDR));
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
-static RCOutput_PCA9685 rcoutDriver(PCA9685_PRIMARY_ADDRESS, false, 0, MINNOW_GPIO_S5_1);
+static RCOutput_PCA9685 rcoutDriver(i2c_mgr_instance.get_device(i2c_devpaths, PCA9685_PRIMARY_ADDRESS), false, 0, MINNOW_GPIO_S5_1);
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_QFLIGHT
 static RCOutput_QFLIGHT rcoutDriver;
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO2
@@ -228,21 +229,31 @@ void _usage(void)
 {
     printf("Usage: -A uartAPath -B uartBPath -C uartCPath -D uartDPath -E uartEPath -F uartFPath\n");
     printf("Options:\n");
-    printf("\t-serial:          -A /dev/ttyO4\n");
+    printf("\tserial:\n");
+    printf("                    -A /dev/ttyO4\n");
     printf("\t                  -B /dev/ttyS1\n");
-    printf("\t-tcp:             -C tcp:192.168.2.15:1243:wait\n");
+    printf("\tnetworking tcp:\n");
+    printf("\t                  -C tcp:192.168.2.15:1243:wait\n");
     printf("\t                  -A tcp:11.0.0.2:5678\n");
-    printf("\t                  -A udp:11.0.0.2:5678\n");
-    printf("\t-custom log path:\n");
+    printf("\t                  -A udp:11.0.0.2:14550\n");
+    printf("\tnetworking UDP:\n");
+    printf("\t                  -A udp:11.0.0.255:14550:bcast\n");
+    printf("\t                  -A udpin:0.0.0.0:14550\n");
+    printf("\tcustom log path:\n");
     printf("\t                  --log-directory /var/APM/logs\n");
     printf("\t                  -l /var/APM/logs\n");
-    printf("\t-custom terrain path:\n");
+    printf("\tcustom terrain path:\n");
     printf("\t                   --terrain-directory /var/APM/terrain\n");
     printf("\t                   -t /var/APM/terrain\n");
+    printf("\tmodule support:\n");
+    printf("\t                   --module-directory %s\n", AP_MODULE_DEFAULT_DIRECTORY);
+    printf("\t                   -M %s\n", AP_MODULE_DEFAULT_DIRECTORY);
 }
 
 void HAL_Linux::run(int argc, char* const argv[], Callbacks* callbacks) const
 {
+    const char *module_path = AP_MODULE_DEFAULT_DIRECTORY;
+    
     assert(callbacks);
 
     int opt;
@@ -259,11 +270,12 @@ void HAL_Linux::run(int argc, char* const argv[], Callbacks* callbacks) const
 #endif
         {"log-directory",       true,  0, 'l'},
         {"terrain-directory",   true,  0, 't'},
+        {"module-directory",    true,  0, 'M'},
         {"help",                false,  0, 'h'},
         {0, false, 0, 0}
     };
 
-    GetOptLong gopt(argc, argv, "A:B:C:D:E:F:l:t:he:S",
+    GetOptLong gopt(argc, argv, "A:B:C:D:E:F:l:t:he:SM:",
                     options);
 
     /*
@@ -303,6 +315,9 @@ void HAL_Linux::run(int argc, char* const argv[], Callbacks* callbacks) const
         case 't':
             utilInstance.set_custom_terrain_directory(gopt.optarg);
             break;
+        case 'M':
+            module_path = gopt.optarg;
+            break;
         case 'h':
             _usage();
             exit(0);
@@ -314,15 +329,12 @@ void HAL_Linux::run(int argc, char* const argv[], Callbacks* callbacks) const
 
     scheduler->init();
     gpio->init();
-#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP
     i2c->begin();
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP
     i2c1->begin();
     i2c2->begin();
 #elif CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_MINLURE
-    i2c->begin();
     i2c1->begin();
-#else
-    i2c->begin();
 #endif
     spi->init();
     rcout->init();
@@ -337,7 +349,15 @@ void HAL_Linux::run(int argc, char* const argv[], Callbacks* callbacks) const
     // deadlock, and infinite loop in setup()") for details about the
     // order of scheduler initialize and setup on Linux.
     scheduler->system_initialized();
+
+    // possibly load external modules
+    if (module_path != nullptr) {
+        AP_Module::init(module_path);
+    }
+
+    AP_Module::call_hook_setup_start();
     callbacks->setup();
+    AP_Module::call_hook_setup_complete();
 
     for (;;) {
         callbacks->loop();

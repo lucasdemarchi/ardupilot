@@ -32,6 +32,7 @@
 #include <AP_Math/AP_Math.h>
 #include <GCS_MAVLink/GCS.h>
 #include <StorageManager/StorageManager.h>
+#include <stdio.h>
 
 extern const AP_HAL::HAL &hal;
 
@@ -978,8 +979,9 @@ bool AP_Param::save(bool force_save)
             GCS_MAVLINK::send_parameter_value_all(name, (enum ap_var_type)info->type, v2);
             return true;
         }
-        if (phdr.type != AP_PARAM_INT32 &&
-            (fabsf(v1-v2) < 0.0001f*fabsf(v1))) {
+        if (!force_save &&
+            (phdr.type != AP_PARAM_INT32 &&
+             (fabsf(v1-v2) < 0.0001f*fabsf(v1)))) {
             // for other than 32 bit integers, we accept values within
             // 0.01 percent of the current value as being the same
             GCS_MAVLINK::send_parameter_value_all(name, (enum ap_var_type)info->type, v2);
@@ -1212,7 +1214,14 @@ bool AP_Param::load_all(void)
       if the HAL specifies a defaults parameter file then override
       defaults using that file
      */
-    load_defaults_file(hal.util->get_custom_defaults_file());
+    const char *default_file = hal.util->get_custom_defaults_file();
+    if (default_file) {
+        if (load_defaults_file(default_file)) {
+            printf("Loaded defaults from %s\n", default_file);
+        } else {
+            printf("Failed to load defaults from %s\n", default_file);
+        }
+    }
 #endif
 
     while (ofs < _storage.size()) {

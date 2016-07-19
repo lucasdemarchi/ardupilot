@@ -36,6 +36,9 @@ Plane::Plane(const char *home_str, const char *frame_str) :
     thrust_scale = (mass * GRAVITY_MSS) / hover_throttle;
     frame_height = 0.1f;
 
+    if (strstr(frame_str, "-heavy")) {
+        mass = 8;
+    }
     if (strstr(frame_str, "-revthrust")) {
         reverse_thrust = true;
     }
@@ -258,4 +261,7 @@ void Plane::update(const struct sitl_input &input)
     
     // update lat/lon/altitude
     update_position();
+
+    // update magnetic field
+    update_mag_field_bf();
 }

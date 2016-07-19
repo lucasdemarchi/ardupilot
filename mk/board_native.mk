@@ -5,6 +5,7 @@ include $(MK_DIR)/find_tools.mk
 # Hardcoded libraries/AP_Common/missing/cmath defines in "make" to retain the current behavior
 EXTRAFLAGS += -DHAVE_CMATH_ISFINITE -DNEED_CMATH_ISFINITE_STD_NAMESPACE
 
+EXTRAFLAGS += -DHAVE_ENDIAN_H -DHAVE_BYTESWAP_H
 #
 # Tool options
 #
@@ -34,10 +35,10 @@ COPTS           =   -ffunction-sections -fdata-sections -fsigned-char
 ASOPTS          =   -x assembler-with-cpp 
 
 # features: TODO detect dependecy and make them optional
-HAVE_LTTNG=
+HAVE_LTTNG_UST=
 
-ifeq ($(HAVE_LTTNG),1)
-DEFINES        += -DPERF_LTTNG=1
+ifeq ($(HAVE_LTTNG_UST),1)
+DEFINES        += -DHAVE_LTTNG_UST=1
 LIBS           += -llttng-ust -ldl
 endif
 
@@ -62,7 +63,11 @@ ifneq ($(SYSTYPE),Darwin)
 LDFLAGS        +=   -Wl,--gc-sections -Wl,-Map -Wl,$(SKETCHMAP)
 endif
 
-LIBS ?= -lm -lrt -pthread
+LIBS ?= -lm -pthread
+
+ifneq ($(SYSTYPE),Darwin)
+LIBS += -lrt
+endif
 ifneq ($(findstring CYGWIN, $(SYSTYPE)),)
 LIBS += -lwinmm
 endif

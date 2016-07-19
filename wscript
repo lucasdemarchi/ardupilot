@@ -10,7 +10,9 @@ sys.path.insert(0, 'Tools/ardupilotwaf/')
 import ardupilotwaf
 import boards
 
-from waflib import Build, ConfigSet, Context, Utils
+from waflib import Build, ConfigSet, Configure, Context, Utils
+
+Configure.autoconfig = 'clobber'
 
 # TODO: implement a command 'waf help' that shows the basic tasks a
 # developer might want to do: e.g. how to configure a board, compile a
@@ -50,31 +52,69 @@ def options(opt):
     }
 
     opt.load('ardupilotwaf')
+    opt.load('build_summary')
 
     g = opt.ap_groups['configure']
+
     boards_names = boards.get_boards_names()
     g.add_option('--board',
-                   action='store',
-                   choices=boards_names,
-                   default='sitl',
-                   help='Target board to build, choices are %s' % boards_names)
+        action='store',
+        choices=boards_names,
+        default='sitl',
+        help='Target board to build, choices are %s.' % boards_names)
 
     g.add_option('--no-submodule-update',
-                 dest='submodule_update',
-                 action='store_false',
-                 default=True,
-                 help='Don\'t update git submodules. Useful for building ' +
-                      'with submodules at specific revisions.')
+        dest='submodule_update',
+        action='store_false',
+        default=True,
+        help='''
+Don't update git submodules. Useful for building with submodules at specific
+revisions.
+''')
 
     g.add_option('--enable-benchmarks',
-                 action='store_true',
-                 default=False,
-                 help='Enable benchmarks')
+        action='store_true',
+        default=False,
+        help='Enable benchmarks.')
 
     g.add_option('--debug',
-                 action='store_true',
-                 default=False,
-                 help='Configure as debug variant')
+        action='store_true',
+        default=False,
+        help='Configure as debug variant.')
+
+    g.add_option('--disable-lttng', action='store_true',
+        default=False,
+        help="Don't use lttng even if supported by board and dependencies available")
+
+    g.add_option('--disable-libiio', action='store_true',
+        default=False,
+        help="Don't use libiio even if supported by board and dependencies available")
+
+    g.add_option('--disable-tests', action='store_true',
+        default=False,
+        help="Disable compilation and test execution")
+
+    g.add_option('--static',
+        action='store_true',
+        default=False,
+        help='Force a static build')
+
+def _collect_autoconfig_files(cfg):
+    for m in sys.modules.values():
+        paths = []
+        if hasattr(m, '__file__'):
+            paths.append(m.__file__)
+        elif hasattr(m, '__path__'):
+            for p in m.__path__:
+                paths.append(p)
+
+        for p in paths:
+            if p in cfg.files or not os.path.isfile(p):
+                continue
+
+            with open(p, 'rb') as f:
+                cfg.hash = Utils.h_list((cfg.hash, f.read()))
+                cfg.files.append(p)
 
 def configure(cfg):
     cfg.env.BOARD = cfg.options.board
@@ -91,8 +131,12 @@ def configure(cfg):
     # Allow to differentiate our build from the make build
     cfg.define('WAF_BUILD', 1)
 
+    if cfg.options.static:
+        cfg.msg('Using static linking')
+        env.STATIC_LINKING = True
+
     cfg.msg('Setting board to', cfg.options.board)
-    boards.get_board(cfg.env.BOARD).configure(cfg)
+    cfg.get_board().configure(cfg)
 
     cfg.load('clang_compilation_database')
     cfg.load('waf_unit_test')
@@ -102,6 +146,7 @@ def configure(cfg):
         cfg.load('gbenchmark')
     cfg.load('gtest')
     cfg.load('static_linking')
+    cfg.load('build_summary')
 
     cfg.start_msg('Benchmarks')
     if cfg.env.HAS_GBENCHMARK:
@@ -135,6 +180,8 @@ def configure(cfg):
 
     cfg.write_config_header(os.path.join(cfg.variant, 'ap_config.h'))
 
+    _collect_autoconfig_files(cfg)
+
 def collect_dirs_to_recurse(bld, globs, **kw):
     dirs = []
     globs = Utils.to_list(globs)
@@ -166,7 +213,7 @@ def _build_dynamic_sources(bld):
     bld(
         features='mavgen',
         source='modules/mavlink/message_definitions/v1.0/ardupilotmega.xml',
-        output_dir='libraries/GCS_MAVLink/include/mavlink/v1.0/',
+        output_dir='libraries/GCS_MAVLink/include/mavlink/v2.0/',
         name='mavlink',
         # this below is not ideal, mavgen tool should set this, but that's not
         # currently possible
@@ -192,7 +239,8 @@ def _build_common_taskgens(bld):
         use='mavlink',
     )
 
-    bld.libgtest()
+    if bld.env.HAS_GTEST:
+        bld.libgtest(cxxflags=['-include', 'ap_config.h'])
 
     if bld.env.HAS_GBENCHMARK:
         bld.libbenchmark()
@@ -247,10 +295,9 @@ def _write_version_header(tsk):
 
 
 def build(bld):
-    config_header = Utils.h_file(bld.bldnode.make_node('ap_config.h').abspath())
-
-    bld.env.CCDEPS = config_header
-    bld.env.CXXDEPS = config_header
+    config_hash = Utils.h_file(bld.bldnode.make_node('ap_config.h').abspath())
+    bld.env.CCDEPS = config_hash
+    bld.env.CXXDEPS = config_hash
 
     bld.post_mode = Build.POST_LAZY
 
@@ -267,7 +314,7 @@ def build(bld):
     _build_dynamic_sources(bld)
 
     bld.add_group('build')
-    boards.get_board(bld.env.BOARD).build(bld)
+    bld.get_board().build(bld)
     _build_common_taskgens(bld)
 
     _build_recursion(bld)
@@ -280,6 +327,7 @@ def build(bld):
         group='dynamic_sources',
     )
 
+    bld.load('build_summary')
 
 ardupilotwaf.build_command('check',
     program_group_list='all',

@@ -202,7 +202,7 @@ public:
      7 = badly conditioned synthetic sideslip fusion
      7 = filter is not initialised
     */
-    void  getFilterFaults(uint8_t &faults) const;
+    void  getFilterFaults(uint16_t &faults) const;
 
     /*
     return filter timeout status as a bitmasked integer
@@ -257,6 +257,9 @@ public:
     // report the number of frames lapsed since the last state prediction
     // this is used by other instances to level load
     uint8_t getFramesSincePredict(void) const;
+
+    // publish output observer angular, velocity and position tracking error
+    void getOutputTrackingError(Vector3f &error) const;
 
 private:
     // Reference to the global EKF frontend for parameters
@@ -474,6 +477,10 @@ private:
     bool readDeltaVelocity(uint8_t ins_index, Vector3f &dVel, float &dVel_dt);
     bool readDeltaAngle(uint8_t ins_index, Vector3f &dAng);
 
+    // helper functions for correcting IMU data
+    void correctDeltaAngle(Vector3f &delAng, float delAngDT);
+    void correctDeltaVelocity(Vector3f &delVel, float delVelDT);
+
     // update IMU delta angle and delta velocity measurements
     void readIMUData();
 
@@ -502,7 +509,7 @@ private:
     void SelectBetaFusion();
 
     // force alignment of the yaw angle using GPS velocity data
-    void alignYawGPS();
+    void realignYawGPS();
 
     // initialise the earth magnetic field states using declination and current attitude and magnetometer meaasurements
     // and return attitude quaternion
@@ -560,7 +567,7 @@ private:
     // avoid unnecessary operations
     void setWindMagStateLearningMode();
 
-    // Check the alignmnent status of the tilt and yaw attitude
+    // Check the alignmnent status of the tilt attitude
     // Used during initial bootstrap alignment of the filter
     void checkAttitudeAlignmentStatus();
 
@@ -596,11 +603,12 @@ private:
     void fuseEulerYaw();
 
     // Fuse declination angle to keep earth field declination from changing when we don't have earth relative observations.
-    void FuseDeclination();
+    // Input is 1-sigma uncertainty in published declination
+    void FuseDeclination(float declErr);
 
     // Propagate PVA solution forward from the fusion time horizon to the current time horizon
     // using a simple observer
-    void calcOutputStatesFast();
+    void calcOutputStates();
 
     // calculate a filtered offset between baro height measurement and EKF height estimate
     void calcFiltBaroOffset();
@@ -608,6 +616,18 @@ private:
     // Select height data to be fused from the available baro, range finder and GPS sources
     void selectHeightForFusion();
 
+    // zero attitude state covariances, but preserve variances
+    void zeroAttCovOnly();
+
+    // record a yaw reset event
+    void recordYawReset();
+
+    // record a magnetic field state reset event
+    void recordMagReset();
+
+    // effective value of MAG_CAL
+    uint8_t effective_magCal(void) const;
+    
     // Length of FIFO buffers used for non-IMU sensor data.
     // Must be larger than the time period defined by IMU_BUFFER_LENGTH
     static const uint32_t OBS_BUFFER_LENGTH = 5;
@@ -627,6 +647,8 @@ private:
     bool badMagYaw;                 // boolean true if the magnetometer is declared to be producing bad data
     bool badIMUdata;                // boolean true if the bad IMU data is detected
 
+    const float EKF_TARGET_DT = 0.01f;    // target EKF update time step
+
     float gpsNoiseScaler;           // Used to scale the  GPS measurement noise and consistency gates to compensate for operation with small satellite counts
     Vector28 Kfusion;               // Kalman gain vector
     Matrix24 KH;                    // intermediate result used for covariance updates
@@ -639,9 +661,6 @@ private:
     obs_ring_buffer_t<tas_elements> storedTAS;      // TAS data buffer
     obs_ring_buffer_t<range_elements> storedRange;
     imu_ring_buffer_t<output_elements> storedOutput;// output state buffer
-    Vector3f correctedDelAng;       // delta angles about the xyz body axes corrected for errors (rad)
-    Quaternion correctedDelAngQuat; // quaternion representation of correctedDelAng
-    Vector3f correctedDelVel;       // delta velocities along the XYZ body axes for weighted average of IMU1 and IMU2 corrected for errors (m/s)
     Matrix3f prevTnb;               // previous nav to body transformation used for INS earth rotation compensation
     ftype accNavMag;                // magnitude of navigation accel - used to adjust GPS obs variance (m/s^2)
     ftype accNavMagHoriz;           // magnitude of navigation accel in horizontal plane (m/s^2)
@@ -702,16 +721,16 @@ private:
     float tasTestRatio;             // sum of squares of true airspeed innovation divided by fail threshold
     bool inhibitWindStates;         // true when wind states and covariances are to remain constant
     bool inhibitMagStates;          // true when magnetic field states and covariances are to remain constant
-    bool firstMagYawInit;           // true when the first post takeoff initialisation of earth field and yaw angle has been performed
     bool gpsNotAvailable;           // bool true when valid GPS data is not available
     bool isAiding;                  // true when the filter is fusing position, velocity or flow measurements
     bool prevIsAiding;              // isAiding from previous frame
     struct Location EKF_origin;     // LLH origin of the NED axis system - do not change unless filter is reset
     bool validOrigin;               // true when the EKF origin is valid
-    float gpsSpdAccuracy;           // estimated speed accuracy in m/s returned by the UBlox GPS receiver
+    float gpsSpdAccuracy;           // estimated speed accuracy in m/s returned by the GPS receiver
+    float gpsPosAccuracy;           // estimated position accuracy in m returned by the GPS receiver
     uint32_t lastGpsVelFail_ms;     // time of last GPS vertical velocity consistency check fail
     uint32_t lastGpsAidBadTime_ms;  // time in msec gps aiding was last detected to be bad
-    float posDownAtTakeoff;         // flight vehicle vertical position at arming used as a reference point
+    float posDownAtTakeoff;         // flight vehicle vertical position sampled at transition from on-ground to in-air and used as a reference (m)
     bool useGpsVertVel;             // true if GPS vertical velocity should be used
     float yawResetAngle;            // Change in yaw angle due to last in-flight yaw reset in radians. A positive value means the yaw angle has increased.
     uint32_t lastYawReset_ms;       // System time at which the last yaw reset occurred. Returned by getLastYawResetAngle
@@ -719,6 +738,7 @@ private:
     float tiltErrFilt;              // Filtered tilt error metric
     bool tiltAlignComplete;         // true when tilt alignment is complete
     bool yawAlignComplete;          // true when yaw alignment is complete
+    bool magStateInitComplete;      // true when the magnetic field sttes have been initialised
     uint8_t stateIndexLim;          // Max state index used during matrix and array operations
     imu_elements imuDataDelayed;    // IMU data at the fusion time horizon
     imu_elements imuDataNew;        // IMU data at the current time horizon
@@ -744,8 +764,8 @@ private:
     output_elements outputDataNew;  // output state data at the current time step
     output_elements outputDataDelayed; // output state data at the current time step
     Vector3f delAngCorrection;      // correction applied to delta angles used by output observer to track the EKF
-    Vector3f delVelCorrection;      // correction applied to earth frame delta velocities used by output observer to track the EKF
     Vector3f velCorrection;         // correction applied to velocities used by the output observer to track the EKF
+    Vector3f posCorrection;         // correction applied to positions used by the output observer to track the EKF
     float innovYaw;                 // compass yaw angle innovation (rad)
     uint32_t timeTasReceived_ms;    // time last TAS data was received (msec)
     bool gpsGoodToAlign;            // true when the GPS quality can be used to initialise the navigation system
@@ -757,8 +777,6 @@ private:
     bool optFlowFusionDelayed;      // true when the optical flow fusion has been delayed
     bool airSpdFusionDelayed;       // true when the air speed fusion has been delayed
     bool sideSlipFusionDelayed;     // true when the sideslip fusion has been delayed
-    bool magFuseTiltInhibit;        // true when the 3-axis magnetoemter fusion is prevented from changing tilt angle
-    uint32_t magFuseTiltInhibit_ms; // time in msec that the condition indicated by magFuseTiltInhibit was commenced
     Vector3f lastMagOffsets;        // Last magnetometer offsets from COMPASS_ parameters. Used to detect parameter changes.
     bool lastMagOffsetsValid;       // True when lastMagOffsets has been initialized
     Vector2f posResetNE;            // Change in North/East position due to last in-flight reset in metres. Returned by getLastPosNorthEastReset
@@ -774,7 +792,14 @@ private:
     uint32_t framesSincePredict;    // number of frames lapsed since EKF instance did a state prediction
     bool startPredictEnabled;       // boolean true when the frontend has given permission to start a new state prediciton cycele
     uint8_t localFilterTimeStep_ms; // average number of msec between filter updates
-    float posDownObsNoise;          // observationn noise on the vertical position used by the state and covariance update step (m)
+    float posDownObsNoise;          // observation noise variance on the vertical position used by the state and covariance update step (m^2)
+    Vector3f delAngCorrected;       // corrected IMU delta angle vector at the EKF time horizon (rad)
+    Vector3f delVelCorrected;       // corrected IMU delta velocity vector at the EKF time horizon (m/s)
+    bool magFieldLearned;           // true when the magnetic field has been learned
+    Vector3f earthMagFieldVar;      // NED earth mag field variances for last learned field (mGauss^2)
+    Vector3f bodyMagFieldVar;       // XYZ body mag field variances for last learned field (mGauss^2)
+
+    Vector3f outputTrackError;
 
     // variables used to calculate a vertical velocity that is kinematically consistent with the verical position
     float posDownDerivative;        // Rate of chage of vertical position (dPosD/dt) in m/s. This is the first time derivative of PosD.
@@ -870,13 +895,33 @@ private:
     uint32_t touchdownExpectedSet_ms; // system time at which expectGndEffectTouchdown was set
     float meaHgtAtTakeOff;            // height measured at commencement of takeoff
 
-    // flags indicating severw numerical errors in innovation variance calculation for different fusion operations
+    // control of post takeoff magentic field and heading resets
+    bool finalInflightYawInit;      // true when the final post takeoff initialisation of yaw angle has been performed
+    bool finalInflightMagInit;      // true when the final post takeoff initialisation of magnetic field states been performed
+    bool magStateResetRequest;      // true if magnetic field states need to be reset using the magneteomter measurements
+    bool magYawResetRequest;        // true if the vehicle yaw and magnetic field states need to be reset using the magnetometer measurements
+    bool gpsYawResetRequest;        // true if the vehicle yaw needs to be reset to the GPS course
+    float posDownAtLastMagReset;    // vertical position last time the mag states were reset (m)
+    float yawInnovAtLastMagReset;   // magnetic yaw innovation last time the yaw and mag field states were reset (rad)
+    Quaternion quatAtLastMagReset;  // quaternion states last time the mag states were reset
+
+    // flags indicating severe numerical errors in innovation variance calculation for different fusion operations
     struct {
         bool bad_xmag:1;
         bool bad_ymag:1;
         bool bad_zmag:1;
         bool bad_airspeed:1;
         bool bad_sideslip:1;
+        bool bad_nvel:1;
+        bool bad_evel:1;
+        bool bad_dvel:1;
+        bool bad_npos:1;
+        bool bad_epos:1;
+        bool bad_dpos:1;
+        bool bad_yaw:1;
+        bool bad_decl:1;
+        bool bad_xflow:1;
+        bool bad_yflow:1;
     } faultStatus;
 
     // flags indicating which GPS quality checks are failing

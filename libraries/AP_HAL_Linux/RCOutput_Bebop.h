@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AP_HAL_Linux.h"
+#include <AP_HAL/I2CDevice.h>
 
 enum bebop_bldc_motor {
     BEBOP_BLDC_MOTOR_1 = 0,
@@ -46,20 +47,11 @@ public:
     uint8_t temperature;
 };
 
-struct bldc_info {
-    uint8_t version_maj;
-    uint8_t version_min;
-    uint8_t type;
-    uint8_t n_motors;
-    uint16_t n_flights;
-    uint16_t last_flight_time;
-    uint32_t total_flight_time;
-    uint8_t last_error;
-}__attribute__((packed));
+struct bldc_info;
 
 class Linux::RCOutput_Bebop : public AP_HAL::RCOutput {
 public:
-    RCOutput_Bebop();
+    RCOutput_Bebop(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev);
 
     static RCOutput_Bebop *from(AP_HAL::RCOutput *rcout) {
         return static_cast<RCOutput_Bebop*>(rcout);
@@ -79,7 +71,7 @@ public:
     int      read_obs_data(BebopBLDC_ObsData &data);
 
 private:
-    AP_HAL::Semaphore *_i2c_sem;
+    AP_HAL::OwnPtr<AP_HAL::I2CDevice> _dev;
     uint16_t _request_period_us[BEBOP_BLDC_MOTORS_NUM];
     uint16_t _period_us[BEBOP_BLDC_MOTORS_NUM];
     uint16_t _rpm[BEBOP_BLDC_MOTORS_NUM];

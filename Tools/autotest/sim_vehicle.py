@@ -15,6 +15,10 @@ import getpass
 import time
 import signal
 
+# List of open terminal windows for macosx
+windowID = []
+
+
 class CompatError(Exception):
     '''a custom exception class to hold state if we encounter the parse error we are looking for'''
     def __init__(self,error, opts, rargs):
@@ -87,37 +91,69 @@ def cygwin_pidof(procName):
 def under_cygwin():
     return os.path.exists("/usr/bin/cygstart")
 
+def under_macos():
+    return sys.platform == 'darwin'
+
 def kill_tasks_cygwin(victims):
+    '''shell out to ps -ea to find processes to kill'''
     for victim in list(victims):
         pids = cygwin_pidof(victim)
 #        progress("pids for (%s): %s" % (victim,",".join([ str(p) for p in pids])))
         for apid in pids:
             os.kill(apid, signal.SIGKILL)
 
-def kill_tasks():
-    '''clean up stray processes by name.  This is a somewhat shotgun approach'''
-    victim_names = set([
-        'JSBSim',
-        'lt-JSBSim',
-        'ArduPlane.elf',
-        'ArduCopter.elf',
-        'APMrover2.elf',
-        'AntennaTracker.elf',
-        'JSBSIm.exe',
-        'MAVProxy.exe',
-        'runsim.py',
-        'AntennaTracker.elf',
-    ])
+def kill_tasks_macos():
+    for window in windowID:
+        cmd = "osascript -e \'tell application \"Terminal\" to close (window(get index of window id %s))\'" % window
+        os.system(cmd)
 
-    if under_cygwin():
-        return kill_tasks_cygwin(list(victim_names))
-
+def kill_tasks_psutil(victims):
+    '''use the psutil module to kill tasks by name.  Sadly, this module is not available on Windows, but when it is we should be able to *just* use this routine'''
     import psutil
     for proc in psutil.process_iter():
-        if proc.status() == psutil.STATUS_ZOMBIE:
+        if proc.status == psutil.STATUS_ZOMBIE:
             continue
-        if proc.name() in victim_names:
+        if proc.name in victims:
             proc.kill()
+
+def kill_tasks_pkill(victims):
+    '''shell out to pkill(1) to kill processed by name'''
+    for victim in victims: # pkill takes a single pattern, so iterate
+        cmd = ["pkill"]
+        cmd.append(victim)
+        run_cmd_blocking("pkill", cmd, quiet=True)
+
+class BobException(Exception):
+    pass
+
+def kill_tasks():
+    '''clean up stray processes by name.  This is a somewhat shotgun approach'''
+    progress("Killing tasks")
+    try:
+        victim_names = [
+            'JSBSim',
+            'lt-JSBSim',
+            'ArduPlane.elf',
+            'ArduCopter.elf',
+            'APMrover2.elf',
+            'AntennaTracker.elf',
+            'JSBSIm.exe',
+            'MAVProxy.exe',
+            'runsim.py',
+            'AntennaTracker.elf',
+        ]
+
+        if under_cygwin():
+            return kill_tasks_cygwin(victim_names)
+        if under_macos():
+            return kill_tasks_macos()
+
+        try:
+            kill_tasks_psutil(victim_names)
+        except ImportError as e:
+            kill_tasks_pkill(victim_names)
+    except Exception as e:
+        progress("kill_tasks failed: {}".format(str(e)))
 
 # clean up processes at exit:
 atexit.register(kill_tasks)
@@ -202,6 +238,7 @@ group_sim.add_option("-t", "--tracker-location", default='CMAC_PILOTSBOX', type=
 group_sim.add_option("-w", "--wipe-eeprom", action='store_true', default=False, help='wipe EEPROM and reload parameters')
 group_sim.add_option("-m", "--mavproxy-args", default=None, type='string', help='additional arguments to pass to mavproxy.py')
 group_sim.add_option("", "--strace", action='store_true', default=False, help="strace the ArduPilot binary")
+group_sim.add_option("", "--model", type='string', default=None, help='Override simulation model to use')
 parser.add_option_group(group_sim)
 
 
@@ -254,6 +291,18 @@ default_frame_for_vehicle = {
     "AntennaTracker": "tracker"
 }
 
+if not default_frame_for_vehicle.has_key(opts.vehicle):
+    # try in parent directories, useful for having config in subdirectories
+    cwd = os.getcwd()
+    while cwd:
+        bname = os.path.basename(cwd)
+        if not bname:
+            break
+        if bname in default_frame_for_vehicle:
+            opts.vehicle = bname
+            break
+        cwd = os.path.dirname(cwd)
+    
 # try to validate vehicle
 if not default_frame_for_vehicle.has_key(opts.vehicle):
     progress("** Is (%s) really your vehicle type?  Try  -v VEHICLETYPE  if not, or be in the e.g. ArduCopter subdirectory" %  (opts.vehicle,))
@@ -275,6 +324,7 @@ _options_for_frame = {
     "calibration": {
         "extra_mavlink_cmds": "module load sitl_calibration;",
     },
+    # COPTER
     "+": {
         "waf_target": "bin/arducopter-quad",
         "default_params_filename": "copter_params.parm"
@@ -288,26 +338,14 @@ _options_for_frame = {
         "waf_target": "bin/arducopter-quad",
         # this param set FRAME doesn't actually work because mavproxy
         # won't set a parameter unless it knows of it, and the param fetch happens asynchronously
-        "extra_mavlink_cmds": "param fetch frame; param set FRAME 1;",
-        "default_params_filename": "copter_params.parm"
-    },
-    "heli-dual": {
-        "make_target": "sitl-heli-dual",
-        "waf_target": "bin/arducopter-coax", # is this correct? -pb201604301447
-    },
-    "heli-compound": {
-        "make_target": "sitl-heli-compound",
-        "waf_target": "bin/arducopter-coax", # is this correct? -pb201604301447
-    },
-    "IrisRos": {
         "default_params_filename": "copter_params.parm",
-        "waf_target": "bin/arducopter-quad",
+        "extra_mavlink_cmds": "param fetch frame; param set FRAME 1;"
     },
-    "Gazebo": {
+    "hexa": {
+	"make_target": "sitl-hexa",
+        "waf_target": "bin/arducopter-hexa",
         "default_params_filename": "copter_params.parm",
-        "waf_target": "bin/arducopter-quad",
     },
-
     "octa": {
 	"make_target": "sitl-octa",
         "waf_target": "bin/arducopter-octa",
@@ -323,28 +361,49 @@ _options_for_frame = {
         "waf_target": "bin/arducopter-y6",
         "default_params_filename": "y6_params.parm",
     },
-    "firefly": {
-        "default_params_filename": "firefly.parm",
-        "waf_target": "bin/arducopter-firefly",
+    # COPTER TYPES
+    "IrisRos": {
+        "waf_target": "bin/arducopter-quad",
+        "default_params_filename": "copter_params.parm",
     },
+    "firefly": {
+        "waf_target": "bin/arducopter-firefly",
+        "default_params_filename": "firefly.parm",
+    },
+    # HELICOPTER
     "heli": {
-	"make_target": "sitl-heli",
+	    "make_target": "sitl-heli",
         "waf_target": "bin/arducopter-heli",
         "default_params_filename": "Helicopter.parm",
     },
-    "last_letter": {
-        "waf_target": "bin/arduplane",
+    "heli-dual": {
+        "make_target": "sitl-heli-dual",
+        "waf_target": "bin/arducopter-coax", # is this correct? -pb201604301447
     },
-    "CRRCSim": {
-        "waf_target": "bin/arduplane",
+    "heli-compound": {
+        "make_target": "sitl-heli-compound",
+        "waf_target": "bin/arducopter-coax", # is this correct? -pb201604301447
     },
-    "jsbsim": {
-        "waf_target": "bin/arduplane",
-        "default_params_filename": "ArduPlane.parm",
+    "singlecopter": {
+	    "make_target": "sitl-single",
+            "waf_target": "bin/arducopter-single",
+            "default_params_filename": "SingleCopter.parm",
     },
+    "coaxcopter": {
+	    "make_target": "sitl-coax",
+            "waf_target": "bin/arducopter-coax",
+            "default_params_filename": "CoaxCopter.parm",
+    },
+    # PLANE
     "quadplane-tilttri" : {
-        "build_target" : "sitl-tri",
+        "make_target" : "sitl-tri",
+        "waf_target" : "bin/arduplane-tri",
         "default_params_filename": "quadplane-tilttri.parm",
+    },
+    "quadplane-tri" : {
+        "make_target" : "sitl-tri",
+        "waf_target" : "bin/arduplane-tri",
+        "default_params_filename": "quadplane-tri.parm",
     },
     "quadplane": {
         "waf_target": "bin/arduplane",
@@ -362,9 +421,29 @@ _options_for_frame = {
         "waf_target": "bin/arduplane",
         "default_params_filename": "plane.parm",
     },
+    # ROVER
     "rover": {
         "waf_target": "bin/ardurover",
         "default_params_filename": "Rover.parm",
+    },
+    "rover-skid": {
+        "waf_target": "bin/ardurover",
+        "default_params_filename": "Rover-skid.parm",
+    },
+    # SIM
+    "Gazebo": {
+        "waf_target": "bin/arducopter-quad",
+        "default_params_filename": "copter_params.parm",
+    },
+    "last_letter": {
+        "waf_target": "bin/arduplane",
+    },
+    "CRRCSim": {
+        "waf_target": "bin/arduplane",
+    },
+    "jsbsim": {
+        "waf_target": "bin/arduplane",
+        "default_params_filename": "ArduPlane.parm",
     },
 }
 
@@ -398,6 +477,16 @@ def options_for_frame(frame, vehicle, opts):
     if not ret.has_key("model"):
         ret["model"] = frame
 
+    if not ret.has_key("sitl-port"):
+        ret["sitl-port"] = True
+
+    if opts.model is not None:
+        ret["model"] = opts.model
+
+    if (ret["model"].find("xplane") != -1 or
+        ret["model"].find("flightaxis") != -1):
+        ret["sitl-port"] = False
+
     if not ret.has_key("make_target"):
         ret["make_target"] = "sitl"
 
@@ -410,7 +499,7 @@ def options_for_frame(frame, vehicle, opts):
 
     return ret
 
-def do_build_waf(vehicledir, opts, frame_options):
+def do_build_waf(opts, frame_options):
     '''build sitl using waf'''
     progress("WAF build")
 
@@ -455,7 +544,7 @@ def do_build(vehicledir, opts, frame_options):
     '''build build target (e.g. sitl) in directory vehicledir'''
 
     if opts.build_system == 'waf':
-        return do_build_waf(vehicledir, opts, frame_options)
+        return do_build_waf(opts, frame_options)
 
     old_dir = os.getcwd()
 
@@ -500,17 +589,27 @@ def progress_cmd(what, cmd):
     shell_text = "%s" % (" ".join([ '"%s"' % x for x in cmd ]))
     progress(shell_text)
 
-def run_cmd_blocking(what, cmd, **kw):
-    progress_cmd(what, cmd)
+def run_cmd_blocking(what, cmd, quiet=False, **kw):
+    if not quiet:
+        progress_cmd(what, cmd)
     p = subprocess.Popen(cmd, **kw)
     return os.waitpid(p.pid,0)
 
 def run_in_terminal_window(autotest, name, cmd):
     '''execute the run_in_terminal_window.sh command for cmd'''
+    global windowID
     runme = [os.path.join(autotest, "run_in_terminal_window.sh"), name]
     runme.extend(cmd)
     progress_cmd("Run " + name, runme)
-    p = subprocess.Popen(runme) # bg this explicitly?!
+
+    if under_macos():
+        # on MacOS record the window IDs so we can close them later
+        out = subprocess.Popen(runme,stdout=subprocess.PIPE).communicate()[0]
+        import re
+        p = re.compile('tab 1 of window id (.*)')
+        windowID.append(p.findall(out)[0])
+    else:
+        p = subprocess.Popen(runme)
 
 tracker_uarta = None # blemish
 
@@ -588,7 +687,10 @@ def start_mavproxy(opts, stuff):
     if opts.hil:
         cmd.extend(["--load-module", "HIL"])
     else:
-        cmd.extend(["--master", mavlink_port, "--sitl", simout_port])
+        cmd.extend(["--master", mavlink_port])
+        if stuff["sitl-port"]:
+            cmd.extend(["--sitl", simout_port])
+
     # If running inside of a vagrant guest, then we probably want to forward our mavlink out to the containing host OS
     if getpass.getuser() == "vagrant":
         cmd.extend(["--out", "10.0.2.2:14550"])

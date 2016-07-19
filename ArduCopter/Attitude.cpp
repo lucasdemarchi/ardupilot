@@ -2,7 +2,7 @@
 
 #include "Copter.h"
 
-// get_smoothing_gain - returns smoothing gain to be passed into attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw_smooth
+// get_smoothing_gain - returns smoothing gain to be passed into attitude_control.input_euler_angle_roll_pitch_euler_rate_yaw
 //      result is a number from 2 to 12 with 2 being very sluggish and 12 being very crisp
 float Copter::get_smoothing_gain()
 {
@@ -57,6 +57,7 @@ void Copter::check_ekf_yaw_reset()
     if (new_ekfYawReset_ms != ekfYawReset_ms) {
         attitude_control.shift_ef_yaw_target(ToDeg(yaw_angle_change_rad) * 100.0f);
         ekfYawReset_ms = new_ekfYawReset_ms;
+        Log_Write_Event(DATA_EKF_YAW_RESET);
     }
 }
 
@@ -94,19 +95,23 @@ float Copter::get_look_ahead_yaw()
  *  throttle control
  ****************************************************************/
 
-// update_thr_average - update estimated throttle required to hover (if necessary)
-//  should be called at 100hz
-void Copter::update_thr_average()
+// update estimated throttle required to hover (if necessary)
+//  called at 100hz
+void Copter::update_throttle_hover()
 {
-    // ensure throttle_average has been initialised
-    if( is_zero(throttle_average) ) {
-        throttle_average = 0.5f;
-        // update position controller
-        pos_control.set_throttle_hover(throttle_average);
-    }
-
+#if FRAME_CONFIG != HELI_FRAME
     // if not armed or landed exit
     if (!motors.armed() || ap.land_complete) {
+        return;
+    }
+
+    // do not update in manual throttle modes or Drift
+    if (mode_has_manual_throttle(control_mode) || (control_mode == DRIFT)) {
+        return;
+    }
+
+    // do not update while climbing or descending
+    if (!is_zero(pos_control.get_desired_velocity().z)) {
         return;
     }
 
@@ -115,10 +120,10 @@ void Copter::update_thr_average()
 
     // calc average throttle if we are in a level hover
     if (throttle > 0.0f && abs(climb_rate) < 60 && labs(ahrs.roll_sensor) < 500 && labs(ahrs.pitch_sensor) < 500) {
-        throttle_average = throttle_average * 0.99f + throttle * 0.01f;
-        // update position controller
-        pos_control.set_throttle_hover(throttle_average);
+        // Can we set the time constant automatically
+        motors.update_throttle_hover(0.01f);
     }
+#endif
 }
 
 // set_throttle_takeoff - allows parents to tell throttle controller we are taking off so I terms can be cleared
@@ -139,9 +144,9 @@ float Copter::get_pilot_desired_throttle(int16_t throttle_control)
 
     // ensure reasonable throttle values
     throttle_control = constrain_int16(throttle_control,0,1000);
+
     // ensure mid throttle is set within a reasonable range
-    g.throttle_mid = constrain_int16(g.throttle_mid,g.throttle_min+50,700);
-    float thr_mid = MAX(0,g.throttle_mid-g.throttle_min) / (float)(1000-g.throttle_min);
+    float thr_mid = constrain_float(motors.get_throttle_hover(), 0.1f, 0.9f);
 
     // check throttle is above, below or in the deadband
     if (throttle_control < mid_stick) {
@@ -199,9 +204,7 @@ float Copter::get_pilot_desired_climb_rate(float throttle_control)
 // get_non_takeoff_throttle - a throttle somewhere between min and mid throttle which should not lead to a takeoff
 float Copter::get_non_takeoff_throttle()
 {
-    // ensure mid throttle is set within a reasonable range
-    g.throttle_mid = constrain_int16(g.throttle_mid,g.throttle_min+50,700);
-    return MAX(0,g.throttle_mid-g.throttle_min) / ((float)(1000-g.throttle_min) * 2.0f);
+    return MAX(0,motors.get_throttle_hover()/2.0f);
 }
 
 float Copter::get_takeoff_trigger_throttle()
@@ -246,6 +249,7 @@ float Copter::get_throttle_pre_takeoff(float input_thr)
 //      returns climb rate (in cm/s) which should be passed to the position controller
 float Copter::get_surface_tracking_climb_rate(int16_t target_rate, float current_alt_target, float dt)
 {
+#if RANGEFINDER_ENABLED == ENABLED
     static uint32_t last_call_ms = 0;
     float distance_error;
     float velocity_correction;
@@ -254,34 +258,37 @@ float Copter::get_surface_tracking_climb_rate(int16_t target_rate, float current
     uint32_t now = millis();
 
     // reset target altitude if this controller has just been engaged
-    if (now - last_call_ms > SONAR_TIMEOUT_MS) {
-        target_sonar_alt = sonar_alt + current_alt_target - current_alt;
+    if (now - last_call_ms > RANGEFINDER_TIMEOUT_MS) {
+        target_rangefinder_alt = rangefinder_state.alt_cm + current_alt_target - current_alt;
     }
     last_call_ms = now;
 
-    // adjust sonar target alt if motors have not hit their limits
+    // adjust rangefinder target alt if motors have not hit their limits
     if ((target_rate<0 && !motors.limit.throttle_lower) || (target_rate>0 && !motors.limit.throttle_upper)) {
-        target_sonar_alt += target_rate * dt;
+        target_rangefinder_alt += target_rate * dt;
     }
 
     // do not let target altitude get too far from current altitude above ground
     // Note: the 750cm limit is perhaps too wide but is consistent with the regular althold limits and helps ensure a smooth transition
-    target_sonar_alt = constrain_float(target_sonar_alt,sonar_alt-pos_control.get_leash_down_z(),sonar_alt+pos_control.get_leash_up_z());
+    target_rangefinder_alt = constrain_float(target_rangefinder_alt,rangefinder_state.alt_cm-pos_control.get_leash_down_z(),rangefinder_state.alt_cm+pos_control.get_leash_up_z());
 
-    // calc desired velocity correction from target sonar alt vs actual sonar alt (remove the error already passed to Altitude controller to avoid oscillations)
-    distance_error = (target_sonar_alt - sonar_alt) - (current_alt_target - current_alt);
-    velocity_correction = distance_error * g.sonar_gain;
+    // calc desired velocity correction from target rangefinder alt vs actual rangefinder alt (remove the error already passed to Altitude controller to avoid oscillations)
+    distance_error = (target_rangefinder_alt - rangefinder_state.alt_cm) - (current_alt_target - current_alt);
+    velocity_correction = distance_error * g.rangefinder_gain;
     velocity_correction = constrain_float(velocity_correction, -THR_SURFACE_TRACKING_VELZ_MAX, THR_SURFACE_TRACKING_VELZ_MAX);
 
-    // return combined pilot climb rate + rate to correct sonar alt error
+    // return combined pilot climb rate + rate to correct rangefinder alt error
     return (target_rate + velocity_correction);
+#else
+    return (float)target_rate;
+#endif
 }
 
 // set_accel_throttle_I_from_pilot_throttle - smoothes transition from pilot controlled throttle to autopilot throttle
 void Copter::set_accel_throttle_I_from_pilot_throttle(float pilot_throttle)
 {
     // shift difference between pilot's throttle and hover throttle into accelerometer I
-    g.pid_accel_z.set_integrator((pilot_throttle-throttle_average) * 1000.0f);
+    g.pid_accel_z.set_integrator((pilot_throttle-motors.get_throttle_hover()) * 1000.0f);
 }
 
 // updates position controller's maximum altitude using fence and EKF limits
