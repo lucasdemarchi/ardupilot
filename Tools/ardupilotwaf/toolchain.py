@@ -19,6 +19,11 @@ from waflib.Tools import clang, clangxx, gcc, gxx
 
 import os
 import re
+import sys
+
+ext = ''
+if sys.platform == 'cygwin' or sys.platform == 'win32':
+    ext = '.exe'
 
 def _set_toolchain_prefix_wrapper(tool_module, var, compiler_names):
     original_configure = tool_module.configure
@@ -31,7 +36,7 @@ def _set_toolchain_prefix_wrapper(tool_module, var, compiler_names):
         for name in compiler_names:
             cfg.env.stash()
             try:
-                cfg.env[var] = '%s-%s' % (cfg.env.TOOLCHAIN, name)
+                cfg.env[var] = '%s-%s%s' % (cfg.env.TOOLCHAIN, name, ext)
                 original_configure(cfg)
             except Errors.ConfigurationError as e:
                 cfg.env.revert()
@@ -140,8 +145,8 @@ def configure(cfg):
     _filter_supported_c_compilers('gcc', 'clang')
     _filter_supported_cxx_compilers('g++', 'clang++')
 
-    cfg.env.AR = cfg.env.TOOLCHAIN + '-ar'
-    cfg.env.PKGCONFIG = cfg.env.TOOLCHAIN + '-pkg-config'
+    cfg.find_toolchain_program('ar')
+
     cfg.msg('Using toolchain', cfg.env.TOOLCHAIN)
     cfg.load('compiler_cxx compiler_c')
 
