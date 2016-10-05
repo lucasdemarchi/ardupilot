@@ -447,8 +447,15 @@ void PX4UARTDriver::_timer_tick(void)
         const auto n_vec = _writebuf.peekiovec(vec, n);
         for (int i = 0; i < n_vec; i++) {
             ret = _write_fd(vec[i].data, (uint16_t)vec[i].len);
-            if (ret > 0)
-                _writebuf.advance(ret);
+            if (ret < 0) {
+                break;
+            }
+            _writebuf.advance(ret);
+
+            /* We wrote less than we asked for, stop */
+            if ((unsigned)ret != vec[i].len) {
+                break;
+            }
         }
         perf_end(_perf_uart);
     }
