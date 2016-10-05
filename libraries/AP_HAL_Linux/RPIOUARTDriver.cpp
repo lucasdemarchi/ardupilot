@@ -4,6 +4,7 @@
 #include <cstdio>
 
 #include <AP_HAL/AP_HAL.h>
+#include <AP_Math/AP_Math.h>
 
 #include "px4io_protocol.h"
 
@@ -162,16 +163,8 @@ void RPIOUARTDriver::_timer_tick(void)
     struct IOPacket _dma_packet_tx = {0}, _dma_packet_rx = {0};
 
     /* get write_buf bytes */
-    uint32_t n = _writebuf.available();
-
-    if (n > PKT_MAX_REGS * 2) {
-        n = PKT_MAX_REGS * 2;
-    }
-
-    uint16_t _max_size = _baudrate / 10 / (1000000 / RPIOUART_POLL_TIME_INTERVAL);
-    if (n > _max_size) {
-        n = _max_size;
-    }
+    uint32_t n = MIN(_writebuf.available(), PKT_MAX_REGS * 2);
+    n = MIN(n, _baudrate / 10U / (1000000U / RPIOUART_POLL_TIME_INTERVAL));
 
     _writebuf.read(&((uint8_t *)_dma_packet_tx.regs)[0], n);
 
