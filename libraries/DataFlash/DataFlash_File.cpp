@@ -1064,7 +1064,7 @@ void DataFlash_File::_io_timer(void)
         }
     }
 
-    ssize_t nwritten = ::write(_write_fd, head, nbytes);
+    ssize_t nwritten = ::write(_write_fd, &head, nbytes);
     if (nwritten <= 0) {
         hal.util->perf_count(_perf_errors);
         close(_write_fd);
