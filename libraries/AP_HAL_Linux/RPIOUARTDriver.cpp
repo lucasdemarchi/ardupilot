@@ -184,7 +184,7 @@ void RPIOUARTDriver::_timer_tick(void)
     _dma_packet_tx.count_code = 0 | PKT_CODE_READ;
     _dma_packet_tx.page = 0;
     _dma_packet_tx.offset = 0;
-    memset(&_dma_packet_tx.regs[0], 0, PKT_MAX_REGS*sizeof(uint16_t) );
+    memset(&_dma_packet_tx.regs[0], 0, PKT_MAX_REGS*sizeof(uint16_t));
     _dma_packet_tx.crc = crc_packet(&_dma_packet_tx);
     _dev->transfer((uint8_t *)&_dma_packet_tx, sizeof(_dma_packet_tx),
                    (uint8_t *)&_dma_packet_rx, sizeof(_dma_packet_rx));
