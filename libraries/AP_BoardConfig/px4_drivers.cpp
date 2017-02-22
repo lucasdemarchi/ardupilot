@@ -46,6 +46,7 @@ extern "C" {
     int px4io_main(int, char **);
     int adc_main(int, char **);
     int tone_alarm_main(int, char **);
+    int mtd_main(int, char **);
 };
 
 
@@ -403,6 +404,19 @@ void AP_BoardConfig::px4_setup_px4io(void)
  */
 void AP_BoardConfig::px4_setup_peripherals(void)
 {
+#ifndef CONFIG_ARCH_BOARD_AEROFC_V1
+    if (px4_start_driver(mtd_main, "mtd", "start /fs/mtd")) {
+        printf("mtd: started OK\n");
+        if (px4_start_driver(mtd_main, "mtd", "readtest /fs/mtd")) {
+            printf("mtd: readtest OK\n");
+        } else {
+            px4_sensor_error("mtd: failed readtest");
+        }
+    } else {
+        px4_sensor_error("mtd: failed start");
+    }
+#endif
+
 #ifndef CONFIG_ARCH_BOARD_AEROFC_V1
     // always start adc
     if (px4_start_driver(adc_main, "adc", "start")) {
