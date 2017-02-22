@@ -79,6 +79,12 @@ then
     echo "[init] reading /fs/microsd/etc/rc.txt"
     sh /fs/microsd/etc/rc.txt
 fi
+# board-specific settings allow to override default behavior
+if [ -f /etc/init.d/rc.board ]; then
+then
+    echo "[init] reading /etc/init.d/rc.board"
+    sh /etc/init.d/rc.board
+fi
 
 #
 # Check for USB host
