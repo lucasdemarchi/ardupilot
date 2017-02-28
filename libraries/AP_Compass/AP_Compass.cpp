@@ -543,7 +543,7 @@ void Compass::_detect_backends(void)
     case AP_BoardConfig::PX4_BOARD_AEROFC:
 #ifdef HAL_COMPASS_IST8310_I2C_BUS
         ADD_BACKEND(AP_Compass_IST8310::probe(*this, hal.i2c_mgr->get_device(HAL_COMPASS_IST8310_I2C_BUS, HAL_COMPASS_IST8310_I2C_ADDR),
-                                              ROTATION_YAW_180), AP_Compass_IST8310::name, true);
+                                              ROTATION_NONE), AP_Compass_IST8310::name, true);
 #endif
         break;
     default:
