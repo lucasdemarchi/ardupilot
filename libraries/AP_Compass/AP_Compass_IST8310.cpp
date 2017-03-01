@@ -149,6 +149,7 @@ bool AP_Compass_IST8310::init()
     _perf_xfer_err = hal.util->perf_alloc(AP_HAL::Util::PC_COUNT, "IST8310_xfer_err");
     _perf_not_ready = hal.util->perf_alloc(AP_HAL::Util::PC_COUNT, "IST8310_not_ready");
     _perf_restart = hal.util->perf_alloc(AP_HAL::Util::PC_COUNT, "IST8310_restart");
+    _perf_bad_data = hal.util->perf_alloc(AP_HAL::Util::PC_COUNT, "IST8310_bad_data");
 
     return true;
 
@@ -213,10 +214,17 @@ void AP_Compass_IST8310::timer()
 
     start_conversion();
 
-    // buffer data is 14bits. Check for invalid data and drop packet
-    if (x > 8191 || x < -8192 ||
-        y > 8191 || y < -8192 ||
-        z > 8191 || z < -8192) {
+    /* FSR:
+     *   x, y: +- 1600 µT
+     *   z:    +- 2500 µT
+     *
+     * Internal ADC is 14 bits, so also reduce z to +- 2457.3 µT.
+     * Check if value makes sense, and discard any outlier
+     */
+    if (x > 5334 || x < -5334 ||
+        y > 5334 || y < -5334 ||
+        z > 8191 || z < -8191) {
+        hal.util->perf_count(_perf_bad_data);
         return;
     }
 
