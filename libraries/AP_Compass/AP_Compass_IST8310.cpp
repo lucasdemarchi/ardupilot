@@ -213,9 +213,15 @@ void AP_Compass_IST8310::timer()
 
     start_conversion();
 
-    // buffer data is 14bits. Check for invalid data and drop packet
-    if (x > 8191 || x < -8192 ||
-        y > 8191 || y < -8192 ||
+    /* FSR:
+     *   x, y: +- 1600 µT
+     *   z:    +- 2500 µT
+     *
+     * Internal ADC is 14 bits. Check if value makes sense, and discard any
+     * outlier
+     */
+    if (x > 5334 || x < -5335 ||
+        y > 5334 || y < -5335 ||
         z > 8191 || z < -8192) {
         return;
     }
