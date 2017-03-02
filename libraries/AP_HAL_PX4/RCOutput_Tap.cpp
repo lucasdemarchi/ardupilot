@@ -493,10 +493,10 @@ void RCOutput_Tap::push()
     uint8_t motor_cnt = _channels_count;
 
     uint8_t motor_mapping[] = {
-            [0] = 1,
-            [1] = 2,
-            [2] = 3,
-            [3] = 0,
+            [0] = 2,
+            [1] = 1,
+            [2] = 0,
+            [3] = 3,
     };
 
     // map from the RPM range to 0 - 100% duty cycle for the ESCs
