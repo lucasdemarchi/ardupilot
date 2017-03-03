@@ -39,7 +39,7 @@
 #define CNTL1_BIT_SINGLE_MEASUREMENT_MODE 0x1
 
 #define CNTL2_REG 0xB
-#define CNTL2_BIT_SRST 1
+#define CNTL2_BIT_SRST 0
 
 #define AVGCNTL_REG 0x41
 #define AVGCNTL_BIT_XZ_0  (0)
