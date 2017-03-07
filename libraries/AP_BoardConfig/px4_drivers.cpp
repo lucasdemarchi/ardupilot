@@ -417,7 +417,6 @@ void AP_BoardConfig::px4_setup_peripherals(void)
     }
 #endif
 
-#ifndef CONFIG_ARCH_BOARD_AEROFC_V1
     // always start adc
     if (px4_start_driver(adc_main, "adc", "start")) {
         hal.analogin->init();
@@ -425,7 +424,6 @@ void AP_BoardConfig::px4_setup_peripherals(void)
     } else {
         px4_sensor_error("no ADC found");
     }
-#endif
 
 #if !defined(CONFIG_ARCH_BOARD_PX4FMU_V4) && \
     !defined(CONFIG_ARCH_BOARD_AEROFC_V1)
