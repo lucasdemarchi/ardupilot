@@ -242,8 +242,7 @@ extern "C" {
 */
 void *PX4Util::dma_allocate(size_t size)
 {
-#if !defined(CONFIG_ARCH_BOARD_PX4FMU_V1) && \
-    !defined(CONFIG_ARCH_BOARD_AEROFC_V1)
+#if !defined(CONFIG_ARCH_BOARD_PX4FMU_V1)
     return fat_dma_alloc(size);
 #else
     return malloc(size);
