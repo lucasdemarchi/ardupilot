@@ -301,6 +301,18 @@ void AP_MotorsMatrix::output_test(uint8_t motor_seq, int16_t pwm)
         return;
     }
 
+    /* check if motor_seq is actually the output channel */
+    if (motor_seq >= 129) {
+        uint8_t chan = motor_seq - 129;
+
+        if (chan < AP_MOTORS_MAX_NUM_MOTORS &&
+            motor_enabled[chan]) {
+            rc_write(chan, pwm);
+        }
+
+        return;
+    }
+
     // loop through all the possible orders spinning any motors that match that description
     hal.rcout->cork();
     for (uint8_t i=0; i<AP_MOTORS_MAX_NUM_MOTORS; i++) {

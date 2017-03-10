@@ -243,6 +243,18 @@ void AP_MotorsCoax::output_test(uint8_t motor_seq, int16_t pwm)
         return;
     }
 
+    /* check if motor_seq is actually the output channel */
+    if (motor_seq >= 129) {
+        uint8_t chan = motor_seq - 129;
+
+        if (chan < AP_MOTORS_MAX_NUM_MOTORS &&
+            motor_enabled[chan]) {
+            rc_write(chan, pwm);
+        }
+
+        return;
+    }
+
     // output to motors and servos
     switch (motor_seq) {
         case 1:
