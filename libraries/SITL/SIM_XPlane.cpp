@@ -100,8 +100,13 @@ void XPlane::select_data(uint64_t usel_mask, uint64_t sel_mask)
 */
 bool XPlane::receive_data(void)
 {
-    uint8_t pkt[10000];
-    uint8_t *p = &pkt[5];
+    union {
+        struct PACKED {
+            uint8_t hdr[5];
+            float data[(10000 - 5) / sizeof(float)];
+        };
+        uint8_t buf[10000];
+    } pkt;
     const uint8_t pkt_len = 36;
     uint64_t data_mask = 0;
     const uint64_t one = 1U;
@@ -120,9 +125,9 @@ bool XPlane::receive_data(void)
         now+1 >= last_data_time_ms + xplane_frame_time) {
         wait_time_ms = 10;
     }
-    ssize_t len = socket_in.recv(pkt, sizeof(pkt), wait_time_ms);
+    ssize_t len = socket_in.recv(pkt.buf, sizeof(pkt), wait_time_ms);
     
-    if (len < pkt_len+5 || memcmp(pkt, "DATA", 4) != 0) {
+    if (len < pkt_len+5 || memcmp(pkt.hdr, "DATA", 4) != 0) {
         // not a data packet we understand
         goto failed;
     }
@@ -137,8 +142,8 @@ bool XPlane::receive_data(void)
         printf("Connected to %s:%u\n", xplane_ip, (unsigned)xplane_port);
     }
     
-    while (len >= pkt_len) {
-        const float *data = (const float *)p;
+    for (uint8_t *p = &pkt.buf[5]; len >= pkt_len;) {
+        const float *data = pkt.data;
         uint8_t code = p[0];
         // keep a mask of what codes we have received
         if (code < 64) {
