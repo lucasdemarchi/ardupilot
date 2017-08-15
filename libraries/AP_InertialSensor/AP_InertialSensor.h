@@ -464,7 +464,7 @@ private:
     AP_Int8     _fast_sampling_mask;
 
     // board orientation from AHRS
-    enum Rotation _board_orientation;
+    enum Rotation _board_orientation = ROTATION_NONE;
 
     // per-sensor orientation to allow for board type defaults at runtime
     enum Rotation _gyro_orientation[INS_MAX_INSTANCES];
@@ -479,7 +479,7 @@ private:
     uint8_t _primary_accel;
 
     // bitmask bit which indicates if we should log raw accel and gyro data
-    uint32_t _log_raw_bit;
+    uint32_t _log_raw_bit = -1;
 
     // has wait_for_sample() found a sample?
     bool _have_sample:1;
