@@ -458,6 +458,18 @@ AP_InertialSensor::AP_InertialSensor()
     , _dataflash(nullptr)
     , _accel_cal_requires_reboot(false)
     , _startup_error_counts_set(false)
+    , _sample_rate(0)
+    , _loop_delta_t(0.f)
+    , _have_sample(false)
+    , _last_sample_usec(0)
+    , _next_sample_usec(0)
+    , _sample_period_usec(0)
+    , _last_update_usec(0)
+    , _peak_hold_state{}
+    , _acal{nullptr}
+    , _accel_calibrator{nullptr}
+    , _trim_pitch(0.f)
+    , _trim_roll(0.f)
     , _new_trim(false)
     , _startup_ms(0)
 #endif
