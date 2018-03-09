@@ -420,6 +420,7 @@ public:
     static void cork();
 
     static void push();
+    static void push_UAVCAN(void);
 
 private:
     struct {
