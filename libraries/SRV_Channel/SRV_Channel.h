@@ -420,8 +420,6 @@ public:
     static void cork();
 
     static void push();
-    static void push_UAVCAN(void);
-
 private:
     struct {
         bool k_throttle_reversible:1;
@@ -463,4 +461,6 @@ private:
     static bool passthrough_disabled(void) {
         return disabled_passthrough;
     }
+    
+    static void push_UAVCAN(void);
 };
