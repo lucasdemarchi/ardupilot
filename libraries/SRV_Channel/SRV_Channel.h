@@ -461,6 +461,4 @@ private:
     static bool passthrough_disabled(void) {
         return disabled_passthrough;
     }
-    
-    static void push_UAVCAN(void);
 };
