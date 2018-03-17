@@ -5,6 +5,8 @@
 #ifndef AP_UAVCAN_H_
 #define AP_UAVCAN_H_
 
+#if HAL_WITH_UAVCAN
+
 #include <uavcan/uavcan.hpp>
 
 #include <AP_HAL/CAN.h>
@@ -56,6 +58,10 @@ public:
 
     // Return uavcan from @iface or nullptr if it's not ready or doesn't exist
     static AP_UAVCAN *get_uavcan(uint8_t iface);
+
+    // Update all ifaces with new values from SRV_Channels: must be called by
+    // main thread
+    static void SRV_update();
 
     // this function will register the listening class on a first free channel or on the specified channel
     // if preferred_channel = 0 then free channel will be searched for
@@ -278,4 +284,12 @@ public:
     }
 };
 
-#endif /* AP_UAVCAN_H_ */
+#else
+// Dummy implementation
+class AP_UAVCAN {
+public:
+    static inline void SRV_update() { }
+};
+#endif
+
+#endif

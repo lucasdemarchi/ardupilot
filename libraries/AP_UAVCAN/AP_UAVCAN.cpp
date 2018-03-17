@@ -599,6 +599,18 @@ void AP_UAVCAN::SRV_send_servos(void)
     } while (repeat_send);
 }
 
+void AP_UAVCAN::SRV_update()
+{
+    uint8_t can_num_ifaces = AP_BoardConfig_CAN::get_can_num_ifaces();
+    for (uint8_t i = 0; i < MAX_NUMBER_OF_CAN_DRIVERS && i < can_num_ifaces; i++) {
+        AP_UAVCAN *ap_uavcan = get_uavcan(i);
+        if (ap_uavcan == nullptr) {
+            continue;
+        }
+        ap_uavcan->SRV_push_servos();
+    }
+}
+
 void AP_UAVCAN::SRV_send_esc(void)
 {
     static const int cmd_max = uavcan::equipment::esc::RawCommand::FieldTypes::cmd::RawValueType::max();
