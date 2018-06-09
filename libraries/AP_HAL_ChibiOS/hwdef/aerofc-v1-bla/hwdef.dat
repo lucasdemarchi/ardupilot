@@ -1,0 +1,57 @@
+# hw definition file for processing by chibios_hwdef.py
+# for aerofc-v1
+
+define CONFIG_HAL_BOARD_SUBTYPE HAL_BOARD_SUBTYPE_CHIBIOS_AEROFC_V1
+
+# MCU class and specific type
+MCU STM32F4xx STM32F427xx
+
+# board ID for firmware load
+APJ_BOARD_ID 65
+
+# crystal frequency
+OSCILLATOR_HZ 16000000
+
+STM32_PLLM_VALUE 8
+STM32_PLLN_VALUE 168
+
+# board voltage
+STM32_VDD 330U
+
+# ChibiOS system timer
+STM32_ST_USE_TIMER 5
+
+# flash size
+FLASH_SIZE_KB 2048
+
+STDOUT_SERIAL SD6
+STDOUT_BAUDRATE 115200
+
+# the *normal* usage of this ordering is:
+# A) SERIAL0: console (primary mavlink, usually USB)
+# B) SERIAL3: primary GPS
+# C) SERIAL1: telem1
+# D) SERIAL2: telem2
+# E) SERIAL4: GPS2
+# F) SERIAL5: extra UART (usually RTOS debug console)
+
+# order of UARTs (and USB)
+UART_ORDER EMPTY EMPTY USART2
+
+PA2 USART2_TX USART2
+PA3 USART2_RX USART2
+
+PC6 USART6_TX USART6
+PC7 USART6_RX USART6
+
+PA13 JTMS-SWDIO SWD
+PA14 JTCK-SWCLK SWD
+
+PE10 FMU_LED_AMBER GPIO(0)
+
+define HAL_USE_EMPTY_STORAGE 1
+define HAL_STORAGE_SIZE 16384
+
+define HAL_COMPASS_DEFAULT HAL_COMPASS_NONE
+define HAL_INS_DEFAULT HAL_INS_NONE
+define HAL_BARO_DEFAULT HAL_BARO_NONE
