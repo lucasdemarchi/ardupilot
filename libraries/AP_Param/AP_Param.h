@@ -327,7 +327,7 @@ public:
 
     /// reoad the hal.util defaults file. Called after pointer parameters have been allocated
     ///
-    static void reload_defaults_file(bool panic_on_error=true);
+    static void reload_defaults_file(bool panic_on_error=false);
     
     static void load_object_from_eeprom(const void *object_pointer, const struct GroupInfo *group_info);
     
