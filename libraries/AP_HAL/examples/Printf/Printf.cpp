@@ -111,10 +111,13 @@ static void test_printf(void)
     test_printf_null_termination();
 }
 
+#include <stdio.h>
+
 void loop(void)
 {
     test_printf();
     hal.scheduler->delay(1000);
+    printf(".");
 }
 
 AP_HAL_MAIN();
